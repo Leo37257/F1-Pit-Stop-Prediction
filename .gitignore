@@ -4,11 +4,16 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 
+# MLflow local working state (Member B regenerates with `python -m src.train`).
+# Handoff contract for Members C and D lives in models/, which IS committed.
 mlflow/
 mlruns/
-models/
+
+# DVC-managed pipeline outputs (regenerable via `dvc repro`).
 data/interim/
 data/processed/
+
+# Large Member A intermediates - we regenerate from data/train.csv.
 notebooks/EDA_output/data/
 
 .env
