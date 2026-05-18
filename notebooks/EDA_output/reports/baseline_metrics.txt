@@ -1,0 +1,23 @@
+PART A — BASELINE METRICS REFERENCE
+======================================================================
+
+Train (2022-2024): n=346,246  positive_rate=0.1761
+Test  (2025):      n=92,894  positive_rate=0.2844
+
+--- Dummy (predict 0) ---
+  accuracy   = 0.7156
+  precision  = 0.0000
+  recall     = 0.0000
+  f1_pos     = 0.0000
+  f1_macro   = 0.4171
+  auc        = 0.5000
+
+--- Rule TyreLife>=25 ---
+  accuracy   = 0.7336
+  precision  = 0.5578
+  recall     = 0.3059
+  f1_pos     = 0.3951
+  f1_macro   = 0.6122
+  auc        = 0.7394
+
+Member B target: F1-macro > 0.61 and AUC > 0.74
