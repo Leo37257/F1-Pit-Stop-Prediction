@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 import mlflow
@@ -27,6 +28,31 @@ from src.preprocess import build_preprocessor
 logger = logging.getLogger(__name__)
 
 
+def _ensure_experiment(name: str, expected_artifact_root: str) -> None:
+    """Create the experiment with an explicit artifact_location if it doesn't exist.
+
+    If it does exist but its stored artifact_location points at a path that
+    isn't writable from here (e.g. an old host path baked in when running
+    under Docker), fail fast with a clear remediation hint - wiping mlflow/
+    and mlruns/ resets MLflow state without affecting models/champion/.
+    """
+    client = mlflow.MlflowClient()
+    exp = client.get_experiment_by_name(name)
+    if exp is None:
+        client.create_experiment(name=name, artifact_location=expected_artifact_root)
+    else:
+        stored = exp.artifact_location.replace("file://", "")
+        if not Path(stored).parent.exists():
+            raise RuntimeError(
+                f"Experiment '{name}' has artifact_location={stored!r} which is "
+                f"not reachable from this filesystem. This usually means the "
+                f"experiment was created in a different environment (host vs "
+                f"Docker container). Fix: delete mlflow/ and mlruns/ to wipe "
+                f"MLflow state, then re-run. models/champion/ is unaffected."
+            )
+    mlflow.set_experiment(name)
+
+
 def run(time_budget_total: int | None = None) -> dict[str, Any]:
     """Train one FLAML AutoML per algorithm, log each to MLflow.
 
@@ -34,7 +60,7 @@ def run(time_budget_total: int | None = None) -> dict[str, Any]:
     """
     config.ensure_dirs()
     mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)
-    mlflow.set_experiment(config.EXPERIMENT_NAME)
+    _ensure_experiment(config.EXPERIMENT_NAME, str(config.MLFLOW_ARTIFACT_ROOT))
 
     total = time_budget_total if time_budget_total is not None else config.AUTOML_TIME_BUDGET
     per_algo = max(15, total // len(config.AUTOML_ESTIMATORS))
