@@ -85,6 +85,50 @@ The full column list with dtypes is in [src/preprocess.py:18-43](src/preprocess.
 
 **If you want raw probabilities** instead of class labels: load with `mlflow.sklearn.load_model("models/champion")` (sklearn flavor) and call `.predict_proba()`.
 
+### Run the inference API
+
+```bash
+uvicorn src.api:app --host 0.0.0.0 --port 8000
+```
+
+`POST /predict` accepts raw lap rows as JSON and applies the same feature engineering used by training before calling `models/champion/`.
+
+```json
+{
+  "records": [
+    {
+      "id": 439140,
+      "Driver": "D119",
+      "Compound": "MEDIUM",
+      "Race": "British Grand Prix",
+      "Year": 2023,
+      "PitStop": 0,
+      "LapNumber": 21,
+      "Stint": 1,
+      "TyreLife": 21.0,
+      "Position": 4,
+      "LapTime (s)": 93.387,
+      "LapTime_Delta": 0.2800000000000011,
+      "Cumulative_Degradation": -4.983999999999995,
+      "RaceProgress": 0.4038461538461538,
+      "Position_Change": 0.0
+    }
+  ]
+}
+```
+
+Run batch inference on the raw Kaggle test file:
+
+```bash
+python -m src.inference --input data/test.csv --output data/test_predictions.csv
+```
+
+`data/test.csv` has no `PitNextLap`, so it cannot produce F1/AUC. To verify metrics from raw labeled data with the same 2025 holdout split used by training:
+
+```bash
+python -m src.inference --input data/train.csv --year 2025 --output data/holdout_2025_predictions.csv
+```
+
 ## For Member D — drift monitoring
 
 Two artifacts in `models/champion/`:
