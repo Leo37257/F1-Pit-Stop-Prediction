@@ -1,27 +1,33 @@
 {
   "registered_model_name": "f1-pit-stop-classifier",
-  "registered_version": 1,
-  "run_id": "1cbecb4c3c9242e3a3bf5f68dd430930",
-  "algorithm": "catboost",
+  "registered_version": 2,
+  "run_id": "aaad4ebf74284a219ab3a85b72ec4b1f",
+  "algorithm": "xgboost",
   "metrics": {
-    "test_macro_f1": 0.7833853999325107,
-    "test_roc_auc": 0.8944310320976999,
-    "val_loss": 0.18108334483274624
+    "test_macro_f1": 0.7851640989320597,
+    "test_roc_auc": 0.894482810606675,
+    "val_loss": 0.17461166207978618
   },
   "baseline_to_beat": {
     "macro_f1": 0.6122,
     "roc_auc": 0.7394
   },
   "training_data": {
-    "train_parquet_sha256": "e152afc4f1b45917015760d556f896f0ae68d3aff207759138f8e03bc6e693a2",
-    "test_parquet_sha256": "44bf1659aade6f1eb06ea145beb9b7905a34ea0d1625013867c0efbdf244a9e6"
+    "train_parquet_sha256": "5f53423d298d5875c2afe9ca735e0a25cfc2b22318e1318b2abda51ced0fcf66",
+    "test_parquet_sha256": "f7e2384f6b4aa6c0b849b06e668c3f845b652cc0f71c1234f6011fb3dc433a39"
   },
-  "trained_at_utc": "2026-05-19T05:25:35.267233+00:00",
-  "git_sha": "1c59b4923953d98f37fa44a7dc3043ea7c5b840e",
+  "trained_at_utc": "2026-05-19T08:12:37.981925+00:00",
+  "git_sha": "15d1603f330f345c0e73a0665e441adbaf21e3cc",
   "best_hyperparams": {
-    "learner": "catboost",
-    "early_stopping_rounds": "11",
-    "learning_rate": "0.020816946203593582",
-    "n_estimators": "8192"
+    "learner": "xgboost",
+    "n_estimators": "3401",
+    "max_leaves": "14",
+    "min_child_weight": "0.07579905689091404",
+    "learning_rate": "0.0661834846079599",
+    "subsample": "1.0",
+    "colsample_bylevel": "0.9389599520577243",
+    "colsample_bytree": "0.9733825394476897",
+    "reg_alpha": "0.0009765625",
+    "reg_lambda": "0.011719319383379728"
   }
 }
