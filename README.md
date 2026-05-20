@@ -2,6 +2,10 @@
 
 # F1 Pit-Stop Prediction
 
+<p align="center">
+  <a href="README.zh-CN.md">简体中文</a>
+</p>
+
 > Binary classifier predicting whether an F1 driver will pit on the **next** lap. Built on Kaggle Playground Series **S5E6** (2022–2025) — full MLOps loop from raw CSV to a live, deployable inference UI.
 
 <p align="center">
