@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>F1 Pit-Stop Predictor · Batch CSV</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #0a0c10;
+        --panel: #11151c;
+        --border: #1d242e;
+        --borderHi: #2a323d;
+        --ink: #e6edf3;
+        --ink2: #aeb7c2;
+        --muted: #6a7480;
+        --red: #ff4d4d;
+        --green: #00ff88;
+        --yellow: #ffd84d;
+        --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: "Inter", system-ui, sans-serif; }
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: var(--bg); }
+      ::-webkit-scrollbar-thumb { background: var(--border); }
+      ::-webkit-scrollbar-thumb:hover { background: var(--borderHi); }
+
+      .topbar {
+        display: flex; align-items: center; gap: 14px;
+        padding: 0 16px; height: 48px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      .topbar .logo {
+        width: 22px; height: 22px; background: var(--ink); color: var(--bg);
+        font-family: var(--mono); font-size: 12px; font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .topbar .brand { font-size: 13px; font-weight: 600; letter-spacing: 0.2px; }
+      .topbar .brand span { color: var(--muted); }
+      .topbar .crumb { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+      .topbar .crumb .slash { color: var(--border); margin: 0 10px; }
+      .topbar .spacer { flex: 1; }
+      .topbar a.back {
+        font-family: var(--mono); font-size: 11px; font-weight: 600;
+        color: var(--ink2); text-decoration: none; padding: 4px 10px;
+        border: 1px solid var(--borderHi); height: 24px;
+        display: inline-flex; align-items: center; letter-spacing: 0.5px;
+        text-transform: uppercase;
+      }
+      .topbar a.back:hover { color: var(--ink); border-color: var(--ink2); }
+
+      main { max-width: 1200px; margin: 0 auto; padding: 32px 24px 64px; }
+
+      h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; margin: 0 0 6px; }
+      .sub { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+
+      .panel {
+        background: var(--panel); border: 1px solid var(--border);
+        padding: 18px 20px; margin-bottom: 18px;
+      }
+      .panel-title {
+        font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase;
+        color: var(--muted); font-weight: 600; margin-bottom: 12px;
+      }
+
+      .drop {
+        border: 1px dashed var(--borderHi); padding: 28px 20px;
+        text-align: center; cursor: pointer;
+        transition: border-color 120ms, background 120ms;
+      }
+      .drop:hover, .drop.drag { border-color: var(--green); background: rgba(0,255,136,0.04); }
+      .drop input[type=file] { display: none; }
+      .drop .hint { color: var(--muted); font-size: 12px; margin-top: 8px; font-family: var(--mono); }
+      .filename { font-family: var(--mono); font-size: 12px; color: var(--ink); margin-top: 6px; }
+
+      .row { display: flex; gap: 12px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+      button.primary, button.ghost {
+        background: var(--ink); color: var(--bg); border: none;
+        padding: 8px 16px; font-family: var(--mono); font-size: 11.5px;
+        font-weight: 600; letter-spacing: 0.5px; cursor: pointer;
+        text-transform: uppercase;
+      }
+      button.primary:disabled { background: var(--borderHi); color: var(--muted); cursor: not-allowed; }
+      button.ghost { background: transparent; color: var(--ink2); border: 1px solid var(--borderHi); }
+      button.ghost:hover { color: var(--ink); border-color: var(--ink2); }
+
+      .status { font-family: var(--mono); font-size: 12px; color: var(--ink2); }
+      .status.err { color: var(--red); }
+      .status.ok { color: var(--green); }
+
+      .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); margin-top: 14px; }
+      .kpi { background: var(--panel); padding: 14px 16px; }
+      .kpi .l { font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+      .kpi .v { font-family: var(--mono); font-size: 22px; font-weight: 500; margin-top: 4px; letter-spacing: -0.5px; }
+      .kpi .v.g { color: var(--green); }
+      .kpi .v.r { color: var(--red); }
+
+      table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11.5px; }
+      table th, table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+      table th {
+        background: #0c1016; color: var(--muted); font-weight: 600;
+        font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase;
+        position: sticky; top: 0;
+      }
+      td.pit { color: var(--red); font-weight: 600; }
+      td.stay { color: var(--muted); }
+      td.num { text-align: right; }
+      .table-wrap { max-height: 480px; overflow: auto; border: 1px solid var(--border); }
+
+      code.cols {
+        display: block; font-family: var(--mono); font-size: 11px; color: var(--ink2);
+        background: #0c1016; padding: 10px 12px; margin-top: 8px;
+        white-space: pre-wrap; word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="logo">P</div>
+      <div class="brand">pitcall<span>.batch</span></div>
+      <div class="crumb"><span class="slash">/</span>csv inference</div>
+      <div class="spacer"></div>
+      <a class="back" href="/">← back to dashboard</a>
+    </div>
+
+    <main>
+      <h1>Batch CSV inference</h1>
+      <p class="sub">Upload a CSV with raw F1 lap data. The XGBoost champion (F1=0.785, ROC-AUC=0.894) runs feature engineering and returns <code style="color:var(--ink2)">pPit</code> + <code style="color:var(--ink2)">pred</code> per row. If <code style="color:var(--ink2)">PitNextLap</code> is present, the macro-F1 score is computed on the fly.</p>
+
+      <div class="panel">
+        <div class="panel-title">1 · Upload CSV</div>
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept=".csv,text/csv" />
+          <div style="font-size:13px; color:var(--ink);">Click to choose, or drag a CSV here</div>
+          <div class="hint">Required columns shown below</div>
+          <div class="filename" id="filename"></div>
+        </label>
+        <code class="cols" id="cols">id, Driver, Compound, Race, Year, PitStop, LapNumber, Stint, TyreLife, Position, LapTime (s), LapTime_Delta, Cumulative_Degradation, RaceProgress, Position_Change
+optional: PitNextLap (target column — if provided, F1 score is reported)</code>
+        <div class="row">
+          <button class="primary" id="submit" disabled>Predict</button>
+          <button class="ghost" id="sample">Use sample row</button>
+          <span class="status" id="status"></span>
+        </div>
+      </div>
+
+      <div class="panel" id="results-panel" style="display:none;">
+        <div class="panel-title">2 · Results</div>
+        <div class="kpi-row" id="kpis"></div>
+        <div class="row" style="margin-top:18px;">
+          <button class="ghost" id="download">⬇ Download CSV with pPit + pred</button>
+        </div>
+        <div class="table-wrap" style="margin-top:14px;">
+          <table id="table"></table>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const drop = document.getElementById('drop');
+      const fileInput = document.getElementById('file');
+      const filenameEl = document.getElementById('filename');
+      const submitBtn = document.getElementById('submit');
+      const sampleBtn = document.getElementById('sample');
+      const statusEl = document.getElementById('status');
+      const resultsPanel = document.getElementById('results-panel');
+      const kpisEl = document.getElementById('kpis');
+      const tableEl = document.getElementById('table');
+      const downloadBtn = document.getElementById('download');
+
+      let pickedFile = null;
+      let lastResult = null;
+
+      function setFile(f) {
+        pickedFile = f;
+        filenameEl.textContent = f ? `${f.name} · ${(f.size / 1024).toFixed(1)} KB` : '';
+        submitBtn.disabled = !f;
+        statusEl.textContent = '';
+        statusEl.className = 'status';
+      }
+
+      fileInput.addEventListener('change', (e) => setFile(e.target.files[0] || null));
+      drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag'); });
+      drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+      drop.addEventListener('drop', (e) => {
+        e.preventDefault();
+        drop.classList.remove('drag');
+        if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+      });
+
+      sampleBtn.addEventListener('click', () => {
+        // 6 laps of one driver — enough for lag features to populate meaningfully
+        const sample = `id,Driver,Compound,Race,Year,PitStop,LapNumber,Stint,TyreLife,Position,LapTime (s),LapTime_Delta,Cumulative_Degradation,RaceProgress,Position_Change
+VER_1,VER,SOFT,Bahrain Grand Prix,2024,0,1,1,1,1,90.5,0.0,-0.3,0.020,0
+VER_2,VER,SOFT,Bahrain Grand Prix,2024,0,2,1,2,1,90.2,-0.3,-0.6,0.039,0
+VER_3,VER,SOFT,Bahrain Grand Prix,2024,0,3,1,3,1,90.4,0.2,-0.9,0.059,0
+VER_4,VER,SOFT,Bahrain Grand Prix,2024,0,4,1,4,1,90.6,0.2,-1.2,0.078,0
+VER_5,VER,SOFT,Bahrain Grand Prix,2024,0,5,1,5,1,90.9,0.3,-1.5,0.098,0
+VER_6,VER,SOFT,Bahrain Grand Prix,2024,0,6,1,6,1,91.3,0.4,-1.8,0.118,0
+VER_7,VER,SOFT,Bahrain Grand Prix,2024,0,7,1,7,1,91.8,0.5,-2.1,0.137,0
+VER_8,VER,SOFT,Bahrain Grand Prix,2024,0,8,1,8,1,92.4,0.6,-2.4,0.157,0
+VER_9,VER,SOFT,Bahrain Grand Prix,2024,0,9,1,9,1,93.1,0.7,-2.7,0.176,0
+VER_10,VER,SOFT,Bahrain Grand Prix,2024,0,10,1,10,1,93.9,0.8,-3.0,0.196,0
+VER_11,VER,SOFT,Bahrain Grand Prix,2024,0,11,1,11,1,94.7,0.8,-3.4,0.216,0
+VER_12,VER,SOFT,Bahrain Grand Prix,2024,0,12,1,12,1,95.5,0.8,-3.8,0.235,0
+VER_13,VER,SOFT,Bahrain Grand Prix,2024,0,13,1,13,1,96.2,0.7,-4.2,0.255,0`;
+        const blob = new Blob([sample], { type: 'text/csv' });
+        setFile(new File([blob], 'sample_VER_13laps.csv', { type: 'text/csv' }));
+      });
+
+      submitBtn.addEventListener('click', async () => {
+        if (!pickedFile) return;
+        submitBtn.disabled = true;
+        statusEl.className = 'status';
+        statusEl.textContent = 'Uploading and running inference…';
+        const fd = new FormData();
+        fd.append('file', pickedFile);
+        try {
+          const res = await fetch('/predict/csv', { method: 'POST', body: fd });
+          if (!res.ok) {
+            let detail = `HTTP ${res.status}`;
+            try { const j = await res.json(); if (j.detail) detail = j.detail; } catch {}
+            throw new Error(detail);
+          }
+          const data = await res.json();
+          lastResult = data;
+          statusEl.className = 'status ok';
+          statusEl.textContent = `✓ Predicted ${data.count.toLocaleString()} rows`;
+          renderResults(data);
+        } catch (err) {
+          statusEl.className = 'status err';
+          statusEl.textContent = `✗ ${err.message}`;
+          resultsPanel.style.display = 'none';
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+
+      function renderResults(data) {
+        resultsPanel.style.display = 'block';
+        const rows = data.rows;
+        const pitCount = rows.filter(r => r.pred === 1).length;
+        const pPits = rows.map(r => r.pPit);
+        const maxP = pPits.length ? Math.max(...pPits) : 0;
+        const meanP = pPits.length ? pPits.reduce((a,b)=>a+b,0)/pPits.length : 0;
+
+        kpisEl.innerHTML = '';
+        const kpis = [
+          { l: 'rows', v: data.count.toLocaleString(), c: '' },
+          { l: 'pit calls', v: pitCount.toLocaleString(), c: pitCount ? 'r' : '' },
+          { l: 'mean p(pit)', v: meanP.toFixed(3), c: '' },
+          { l: data.f1_macro != null ? 'macro F1' : 'max p(pit)', v: data.f1_macro != null ? data.f1_macro.toFixed(3) : maxP.toFixed(3), c: 'g' },
+        ];
+        for (const k of kpis) {
+          const d = document.createElement('div');
+          d.className = 'kpi';
+          d.innerHTML = `<div class="l">${k.l}</div><div class="v ${k.c}">${k.v}</div>`;
+          kpisEl.appendChild(d);
+        }
+
+        const preview = rows.slice(0, 200);
+        const cols = ['Driver', 'LapNumber', 'Compound', 'Stint', 'TyreLife', 'Position', 'pPit', 'pred'];
+        if (rows[0] && 'PitNextLap' in rows[0]) cols.push('PitNextLap');
+        let html = '<thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+        for (const r of preview) {
+          html += '<tr>';
+          for (const c of cols) {
+            let v = r[c];
+            let cls = '';
+            if (c === 'pPit' && typeof v === 'number') { v = v.toFixed(3); cls = 'num'; }
+            else if (c === 'pred') { cls = v === 1 ? 'pit' : 'stay'; v = v === 1 ? 'PIT' : 'STAY'; }
+            else if (typeof v === 'number') { cls = 'num'; }
+            html += `<td class="${cls}">${v ?? ''}</td>`;
+          }
+          html += '</tr>';
+        }
+        html += '</tbody>';
+        if (rows.length > preview.length) {
+          html += `<tfoot><tr><td colspan="${cols.length}" style="color:var(--muted); text-align:center; padding:10px;">showing first ${preview.length} of ${rows.length.toLocaleString()} rows — download CSV for the full set</td></tr></tfoot>`;
+        }
+        tableEl.innerHTML = html;
+      }
+
+      downloadBtn.addEventListener('click', () => {
+        if (!lastResult) return;
+        const rows = lastResult.rows;
+        if (!rows.length) return;
+        const keys = Object.keys(rows[0]);
+        const esc = (v) => {
+          if (v === null || v === undefined) return '';
+          const s = String(v);
+          return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
+        const lines = [keys.join(',')];
+        for (const r of rows) lines.push(keys.map(k => esc(r[k])).join(','));
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (pickedFile?.name?.replace(/\.csv$/i, '') || 'data') + '_predictions.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    </script>
+  </body>
+</html>
