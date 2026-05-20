@@ -4,12 +4,32 @@
 
 > Binary classifier predicting whether an F1 driver will pit on the **next** lap. Built on Kaggle Playground Series **S5E6** (2022–2025) — full MLOps loop from raw CSV to a live, deployable inference UI.
 
-<p>
-  <a href="https://huggingface.co/spaces/T0MYYY/f1-pit-predictor"><img alt="HF Space" src="https://img.shields.io/badge/🤗%20Space-live-ff6b00?style=flat-square"></a>
-  <img alt="macro F1" src="https://img.shields.io/badge/macro--F1-0.785-00aa55?style=flat-square">
-  <img alt="ROC-AUC" src="https://img.shields.io/badge/ROC--AUC-0.894-00aa55?style=flat-square">
-  <img alt="python" src="https://img.shields.io/badge/python-3.12-blue?style=flat-square">
-  <img alt="model" src="https://img.shields.io/badge/model-XGBoost%20(FLAML)-ec5800?style=flat-square">
+<p align="center">
+  <a href="https://huggingface.co/spaces/T0MYYY/f1-pit-predictor"><img alt="Try it live" src="https://img.shields.io/badge/Try%20it%20live-▶-1f7a3d?style=flat-square&labelColor=2a323d"></a>
+  <a href="https://huggingface.co/spaces/T0MYYY/f1-pit-predictor"><img alt="HF Space" src="https://img.shields.io/badge/🤗%20Space-running-FFD21E?style=flat-square&labelColor=2a323d"></a>
+  <img alt="macro-F1" src="https://img.shields.io/badge/macro--F1-0.785-00aa55?style=flat-square&labelColor=2a323d">
+  <img alt="ROC-AUC" src="https://img.shields.io/badge/ROC--AUC-0.894-00aa55?style=flat-square&labelColor=2a323d">
+  <img alt="Status" src="https://img.shields.io/badge/Status-v2%20shipped-ec5800?style=flat-square&labelColor=2a323d">
+  <img alt="PRs" src="https://img.shields.io/badge/PRs-welcome-1f7a3d?style=flat-square&labelColor=2a323d">
+</p>
+
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white&labelColor=2a323d">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.136-009688?style=flat-square&logo=fastapi&logoColor=white&labelColor=2a323d">
+  <img alt="Pydantic" src="https://img.shields.io/badge/Pydantic-2-E92063?style=flat-square&logo=pydantic&logoColor=white&labelColor=2a323d">
+  <img alt="Uvicorn" src="https://img.shields.io/badge/Uvicorn-0.34-499848?style=flat-square&logo=gunicorn&logoColor=white&labelColor=2a323d">
+  <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black&labelColor=2a323d">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white&labelColor=2a323d">
+</p>
+
+<p align="center">
+  <img alt="pandas" src="https://img.shields.io/badge/pandas-2.2-150458?style=flat-square&logo=pandas&logoColor=white&labelColor=2a323d">
+  <img alt="scikit-learn" src="https://img.shields.io/badge/scikit--learn-1.5-F7931E?style=flat-square&logo=scikitlearn&logoColor=white&labelColor=2a323d">
+  <img alt="XGBoost" src="https://img.shields.io/badge/XGBoost-2.1-ec5800?style=flat-square&labelColor=2a323d">
+  <img alt="MLflow" src="https://img.shields.io/badge/MLflow-2.17-0194E2?style=flat-square&logo=mlflow&logoColor=white&labelColor=2a323d">
+  <img alt="FLAML" src="https://img.shields.io/badge/FLAML-2.3-7B68EE?style=flat-square&labelColor=2a323d">
+  <img alt="Airflow" src="https://img.shields.io/badge/Airflow-2.9-017CEE?style=flat-square&logo=apacheairflow&logoColor=white&labelColor=2a323d">
+  <img alt="DVC" src="https://img.shields.io/badge/DVC-3.55-13ADC7?style=flat-square&logo=dvc&logoColor=white&labelColor=2a323d">
 </p>
 
 ---
@@ -23,10 +43,7 @@
 | **CSV batch inference UI** | <https://t0myyy-f1-pit-predictor.hf.space/predict.html> |
 | **Health check** | <https://t0myyy-f1-pit-predictor.hf.space/health> |
 
-The space serves a FastAPI app behind the engineer-facing dashboard:
-- `GET /` — race-playback dashboard. Right-side toolbar exposes a `REAL MODEL` toggle that swaps synthetic predictions for live `predict_proba` calls.
-- `GET /predict.html` — drag-and-drop CSV inference. Returns per-row `pPit` + `pred`, optional macro-F1 if `PitNextLap` is included.
-- `POST /predict`, `POST /predict/dashboard`, `POST /predict/csv` — JSON / multipart endpoints.
+`GET /` is the race-playback dashboard (a `REAL MODEL` toggle swaps the synthetic predictions for live `predict_proba` calls). `GET /predict.html` is the drag-and-drop CSV inference page. `POST /predict`, `POST /predict/dashboard`, `POST /predict/csv` are JSON / multipart endpoints — see [§ API](#-api-endpoints).
 
 ---
 
@@ -47,7 +64,7 @@ flowchart LR
     class D todo
 ```
 
-> **Member C is complete.** The dashboard, the live REAL MODEL toggle, the CSV batch UI, the FastAPI service, and the Hugging Face Docker deployment all live on the [`dashboard`](https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction/tree/dashboard) branch and are running at the URL above. **Member D is the next handoff** — see [§ For Member D](#-for-member-d--drift-monitoring) below.
+A → B → C is shipped (dashboard, REAL MODEL toggle, CSV batch UI, Docker deploy on HF). D is the next handoff — jump to [§ For Member D](#-for-member-d--drift-monitoring).
 
 ---
 
@@ -55,7 +72,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph TRAIN ["Training (Member B — host or Airflow)"]
+    subgraph TRAIN ["Training — Member B (host or Airflow)"]
         direction LR
         raw["data/train.csv<br/><i>16-col Kaggle schema</i>"] --> ingest[["src.ingest"]]
         ingest --> parq[("data/interim/raw.parquet")]
@@ -67,16 +84,16 @@ flowchart TB
         reg --> champ[["<b>models/champion/</b><br/>mlflow pyfunc dir<br/>+ CHAMPION.json baseline"]]
     end
 
-    subgraph SERVE ["Serving (Member C — HF Docker Space)"]
+    subgraph SERVE ["Serving — Member C (HF Docker Space)"]
         direction LR
         champ --> api[["FastAPI<br/>src.api:app"]]
         api --> ep1["POST /predict<br/><i>raw JSON records</i>"]
         api --> ep2["POST /predict/dashboard<br/><i>dashboard rows</i>"]
         api --> ep3["POST /predict/csv<br/><i>multipart CSV upload</i>"]
-        api --> ui[["dashboard/<br/>React+Babel SPA<br/>+ predict.html"]]
+        api --> ui[["dashboard/<br/>React + Babel SPA<br/>+ predict.html"]]
     end
 
-    subgraph MONITOR ["Monitoring (Member D — TODO)"]
+    subgraph MONITOR ["Monitoring — Member D (TODO)"]
         direction LR
         champ -.->|baseline metrics<br/>+ data hashes| drift[["Evidently / custom<br/>drift dashboards"]]
         ep1 -.->|prod requests/preds<br/>logged to disk| drift
@@ -85,7 +102,6 @@ flowchart TB
 
     classDef done fill:#0a3d1f,stroke:#1f7a3d,color:#dff5e7;
     classDef todo fill:#3d2a0a,stroke:#7a5b1f,color:#f5e7c7;
-    classDef art fill:#1d242e,stroke:#2a323d,color:#aeb7c2;
     class champ done
     class drift todo
 ```
@@ -96,7 +112,7 @@ flowchart TB
 
 ### Predict with the trained champion (no training needed)
 
-The champion is committed at [`models/champion/`](models/champion/) (5.4 MB, XGBoost). A clean clone is enough to serve predictions.
+The champion is committed at [`models/champion/`](models/champion/) (5.4 MB, XGBoost via FLAML). A clean clone is enough to serve predictions.
 
 ```bash
 git clone https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction.git
@@ -104,8 +120,8 @@ cd F1-Pit-Stop-Prediction
 
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-pytest tests/                                # 2/2 smoke tests
-python -m src.inference --input data/train.csv --year 2025  # batch predict on 2025 holdout
+pytest tests/                                            # 2/2 smoke tests
+python -m src.inference --input data/train.csv --year 2025   # batch predict on 2025 holdout
 ```
 
 ### Run the full inference UI locally (mirror of the HF Space)
@@ -127,7 +143,7 @@ docker build -f deploy/hf/Dockerfile -t f1-pit-predictor .
 docker run -p 7860:7860 f1-pit-predictor
 ```
 
-### Retrain (Member B's loop)
+### Retrain
 
 ```bash
 python -m src.ingest         # ~2s
@@ -136,15 +152,23 @@ python -m src.train          # ~12 min (4 × FLAML @ 150s/algo)
 python -m src.register       # ~5s · writes models/champion/
 ```
 
-Or via Airflow (`docker compose up -d` → trigger `pit_stop_training`).
+Or via Airflow (`docker compose up -d` → trigger `pit_stop_training` at <http://localhost:8080>, login `admin/admin`).
 
 ---
 
-## 🔬 For Member C — FastAPI service ✅
+## 🔌 API endpoints
 
-> **Status: shipped.** Code on [`dashboard`](https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction/tree/dashboard), deployed to [T0MYYY/f1-pit-predictor](https://huggingface.co/spaces/T0MYYY/f1-pit-predictor).
+The dashboard branch's [`src/api.py`](https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction/blob/dashboard/src/api.py) exposes:
 
-The champion is a self-contained MLflow model directory. **No tracking server or sqlite needed** — just load the directory:
+| Endpoint | Body | Use case |
+|---|---|---|
+| `GET /health` | — | Liveness probe |
+| `POST /predict` | `{"records":[{...raw 15 cols}]}` | Original int-label endpoint, kept for back-compat |
+| `POST /predict/dashboard` | `{race, year, rows:[{driver, lap, compound, …}]}` | Per-driver request fired by the dashboard's `REAL MODEL` toggle |
+| `POST /predict/csv` | `multipart/form-data file=…csv` | Drag-and-drop CSV inference for `/predict.html` |
+| `GET /` | — | StaticFiles mount — serves `dashboard/index.html` |
+
+**Loading the champion directly in Python** (no API needed):
 
 ```python
 import mlflow.sklearn
@@ -152,34 +176,9 @@ model = mlflow.sklearn.load_model("models/champion")
 probs = model.predict_proba(features_df)[:, 1]   # raw probabilities
 ```
 
-**Endpoints exposed by [`src/api.py`](src/api.py) on the `dashboard` branch:**
+**Input shape.** A DataFrame with the 15 raw columns from [`src/config.py:RAW_COLUMNS`](src/config.py) **except** `PitNextLap`. All feature engineering — lag, rolling means, tyre-life buckets, early/late-race flags — is rebuilt inside `prepare_features()` ([`src/inference.py`](src/inference.py)). Feature engineering groups by `(Year, Race, Driver, Stint)`, so **send a full driver-stint history per request** for lag/rolling features to populate correctly.
 
-| Endpoint | Body | Use case |
-|---|---|---|
-| `POST /predict` | `{"records":[{...}]}` (raw lap JSON) | Original int-label endpoint, kept for backward compatibility |
-| `POST /predict/dashboard` | `{race, year, rows:[{driver, lap, compound, …}]}` | Per-driver request fired by the React dashboard's `REAL MODEL` toggle |
-| `POST /predict/csv` | `multipart/form-data file=…csv` | Drag-and-drop CSV inference for `/predict.html` |
-| `GET /health` | — | Liveness probe |
-
-**Input shape & schema.** A pandas DataFrame with the 15 raw columns (everything in [`src/config.py:RAW_COLUMNS`](src/config.py) except `PitNextLap`). All feature engineering — lag features, rolling means, tyre-life buckets, early/late-race flags — is rebuilt inside `prepare_features()` ([`src/inference.py`](src/inference.py)), so the API only needs the raw 15 columns. Grouping is by `(Year, Race, Driver, Stint)` so **send a full driver-stint history per request** for the lag/rolling features to populate correctly.
-
-**Refresh cadence.** When Member B retrains, `models/champion/` is updated in-place. A `git pull` and process restart picks it up. Nothing else changes.
-
-**Dashboard branch contents** (everything Member C produced):
-```
-dashboard/
-├── index.html              · main dashboard (React + Babel via CDN)
-├── pp-app.jsx              · console + strategy-wall views, REAL MODEL toggle, scrubber
-├── pp-data.jsx             · synthetic race generator (deterministic, mulberry32 PRNG)
-├── pp-ui.jsx               · primitives (tags, gauges, sparks, tyres)
-├── tweaks-panel.jsx        · settings panel
-└── predict.html            · standalone CSV upload page
-deploy/hf/
-├── Dockerfile              · python:3.12-slim + libgomp1
-├── requirements.txt        · inference-only (flaml + lightgbm required for the pickle)
-├── README.md               · HF Space frontmatter
-└── push_space.py           · automated deploy: stage → upload_folder → done
-```
+**Refresh cadence.** When the training pipeline retrains, `models/champion/` is updated in-place. A `git pull` and process restart on the HF Space picks it up — no schema changes, no client work.
 
 ---
 
@@ -191,12 +190,12 @@ Three artifacts you already have:
 
 1. **`models/champion/CHAMPION.json`** — drift baseline:
    - `metrics.test_macro_f1`, `metrics.test_roc_auc` → performance floor to alert against
-   - `training_data.train_parquet_sha256` / `test_parquet_sha256` → identity hashes. Recompute on incoming data and compare — divergence ≠ drift, but tells you the dataset changed.
+   - `training_data.train_parquet_sha256` / `test_parquet_sha256` → identity hashes. Recompute on incoming data and compare; divergence ≠ drift but tells you the dataset changed.
    - `algorithm`, `best_hyperparams`, `trained_at_utc`, `git_sha`, `registered_version` → provenance for the alert payload.
 
 2. **`data/processed/test.parquet`** — the **2025 reference distribution** for feature-drift detection (Evidently AI's reference dataset slot, KS tests, PSI, etc.).
 
-3. **The deployed FastAPI** — wire request/prediction logging into [`src/api.py`](src/api.py) `predict_dashboard` / `predict_csv` to capture production inputs and predictions, then diff against the reference distribution.
+3. **The deployed FastAPI** — wire request/prediction logging into [`src/api.py`](https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction/blob/dashboard/src/api.py) `predict_dashboard` / `predict_csv` to capture production inputs and predictions, then diff against the reference distribution.
 
 ### Heads-up: the 2023 anomaly is not real drift
 
@@ -240,19 +239,19 @@ F1-Pit-Stop-Prediction/
 │   ├── train.py                   · FLAML per-algorithm AutoML, MLflow per-run logs
 │   ├── register.py                · Champion selection, MLflow Registry, export
 │   ├── inference.py               · prepare_features() · load_*_model() · CLI
-│   └── api.py                     · FastAPI: /predict (+ /predict/dashboard, /predict/csv on `dashboard` branch)
+│   └── api.py                     · FastAPI app (full endpoint set on `dashboard` branch)
 ├── dags/pit_stop_training_dag.py  · Airflow DAG — 4 BashOperators wrapping src.*
 ├── tests/                         · Import + config-path smoke tests
-├── models/champion/               · ⭐ Handoff payload for Members C and D
+├── models/champion/               · ⭐ Handoff payload (consumed by Members C and D)
 ├── docker-compose.yaml            · Airflow LocalExecutor + Postgres
-├── Dockerfile                     · apache/airflow:2.9.3-python3.12 + ML deps (training env)
+├── Dockerfile                     · Training image (apache/airflow:2.9.3-python3.12 + ML deps)
 ├── dvc.yaml / dvc.lock            · DVC pipeline (ingest, preprocess stages)
 └── requirements.txt               · Pinned versions
 ```
 
 **Branch map.**
-- `main` — training pipeline, single-endpoint API, this README.
-- `dashboard` — everything on main **+** dashboard UI **+** `/predict/dashboard` & `/predict/csv` **+** `deploy/hf/` (HF Docker).
+- `main` — training pipeline, `/predict` API, this README.
+- `dashboard` — everything on main **+** dashboard UI **+** `/predict/dashboard` & `/predict/csv` **+** [`deploy/hf/`](https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction/tree/dashboard/deploy/hf) (HF Docker).
 
 ---
 
@@ -331,7 +330,7 @@ dvc repro                   # replays ingest + preprocess; doesn't run train/reg
 
 ---
 
-## 🤝 Retrain workflow (Member B)
+## 🤝 Retrain workflow
 
 1. Pull latest data if changed.
 2. `python -m src.train` (host) or trigger Airflow DAG (Docker).
