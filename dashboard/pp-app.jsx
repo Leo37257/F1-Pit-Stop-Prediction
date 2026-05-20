@@ -906,6 +906,7 @@ const DEFAULT_TWEAKS = /*EDITMODE-BEGIN*/{
 }/*EDITMODE-END*/;
 
 function Tweaks({ tweaks, setTweak, focusDriver, setFocusDriver, raceData }) {
+  const hasUploaded = PPData.hasUploaded && PPData.hasUploaded();
   return (
     <TweaksPanel title="Tweaks">
       <TweakSection label="Race">
@@ -913,7 +914,12 @@ function Tweaks({ tweaks, setTweak, focusDriver, setFocusDriver, raceData }) {
           label="Session"
           value={tweaks.raceId}
           onChange={(v) => setTweak("raceId", v)}
-          options={PPData.RACES.map((r) => ({ value: r.id, label: `${r.name} · ${r.year}` }))}
+          options={PPData.RACES.map((r) => ({
+            value: r.id,
+            label: r.id === "uploaded"
+              ? `📤 ${r.name} · ${r.year} (uploaded)`
+              : `${r.name} · ${r.year}`,
+          }))}
         />
         <TweakSelect
           label="Focus driver"
@@ -921,6 +927,34 @@ function Tweaks({ tweaks, setTweak, focusDriver, setFocusDriver, raceData }) {
           onChange={(v) => setFocusDriver(v)}
           options={raceData.drivers}
         />
+        {hasUploaded && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={() => {
+                if (!confirm("Remove uploaded race and revert to demo data?")) return;
+                PPData.clearUploaded();
+                setTweak("raceId", "singapore_2025");
+                // Force a hard reload so React picks up the mutated RACES list.
+                window.location.assign("/");
+              }}
+              style={{
+                border: `1px solid ${PP_T.borderHi}`,
+                background: "transparent",
+                color: PP_T.muted,
+                padding: "4px 10px",
+                fontFamily: PP_MONO,
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: 0.5,
+                textTransform: "uppercase",
+                cursor: "pointer",
+              }}
+            >
+              ✕ clear uploaded · revert to demo
+            </button>
+          </div>
+        )}
       </TweakSection>
       <TweakSection label="Model">
         <TweakSlider
@@ -962,6 +996,20 @@ function Tweaks({ tweaks, setTweak, focusDriver, setFocusDriver, raceData }) {
 
 function App() {
   const [tweaks, setTweak] = useTweaks(DEFAULT_TWEAKS);
+
+  // If we landed via /?race=uploaded (from the CSV upload page) and an
+  // uploaded race is actually present, switch to it. Run once on mount.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const want = params.get("race");
+      if (want && PPData.RACES_DATA[want] && want !== tweaks.raceId) {
+        setTweak("raceId", want);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const raceData = PPData.RACES_DATA[tweaks.raceId] || PPData.RACES_DATA.singapore_2025;
   const [mode, setMode] = useState(tweaks.startMode || "console");
   const [currentLap, setCurrentLap] = useState(Math.round(raceData.laps * 0.35));

@@ -188,6 +188,65 @@
     RACES_DATA[race.id] = generateRace(race);
   });
 
+  // ----- Uploaded race (from CSV upload at /predict.html) ---------------------
+  // The predict.html page transforms the predicted CSV rows into the dashboard
+  // row shape and stores it under `pp.uploadedRace`. Inject it as the
+  // `uploaded` race so the Tweaks → Race selector can pick it up.
+  const UPLOADED_KEY = "pp.uploadedRace";
+  function tryLoadUploaded() {
+    try {
+      const raw = typeof window !== "undefined" && window.localStorage
+        ? window.localStorage.getItem(UPLOADED_KEY) : null;
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.rows) || !parsed.rows.length) return null;
+      return parsed;
+    } catch (err) {
+      console.warn("[PPData] failed to load uploaded race:", err);
+      return null;
+    }
+  }
+  function installUploaded(payload) {
+    if (!payload) return false;
+    // Build a RACES entry that mirrors the built-in race shape.
+    const meta = {
+      id: "uploaded",
+      name: payload.name || "Uploaded CSV",
+      year: payload.year || new Date().getFullYear(),
+      laps: payload.laps,
+      seed: 0,
+      baseTime: payload.baseTime || 90,
+      focus: payload.focus || (payload.drivers && payload.drivers[0]),
+      compoundBias: payload.compoundBias || [],
+      uploaded: true,
+      uploadedAt: payload.uploadedAt,
+      uploadedFilename: payload.uploadedFilename,
+    };
+    // De-dupe if a previous "uploaded" entry is already present.
+    const existingIdx = RACES.findIndex((r) => r.id === "uploaded");
+    if (existingIdx >= 0) RACES.splice(existingIdx, 1);
+    RACES.unshift(meta);
+    RACES_DATA["uploaded"] = {
+      ...meta,
+      drivers: payload.drivers,
+      driverMeta: payload.driverMeta || payload.drivers.map((id) => ({ id, short: id })),
+      stints: payload.stints || payload.drivers.map(() => []),
+      rows: payload.rows,
+    };
+    return true;
+  }
+  function clearUploaded() {
+    try { window.localStorage.removeItem(UPLOADED_KEY); } catch {}
+    const idx = RACES.findIndex((r) => r.id === "uploaded");
+    if (idx >= 0) RACES.splice(idx, 1);
+    delete RACES_DATA["uploaded"];
+  }
+  function reloadUploaded() {
+    clearUploaded();
+    return installUploaded(tryLoadUploaded());
+  }
+  installUploaded(tryLoadUploaded());
+
   function getLap(raceData, lap) {
     return raceData.rows.filter((r) => r.lap === lap).sort((a, b) => a.position - b.position);
   }
@@ -216,5 +275,10 @@
     return { total, predPit, actualPit, agree, accuracy: agree / total, tp, fp, fn, tn, precision: prec, recall: rec, f1 };
   }
 
-  window.PPData = { RACES, RACES_DATA, getLap, getDriver, getRow, summarize };
+  window.PPData = {
+    RACES, RACES_DATA, getLap, getDriver, getRow, summarize,
+    hasUploaded: () => !!RACES_DATA["uploaded"],
+    clearUploaded,
+    reloadUploaded,
+  };
 })();

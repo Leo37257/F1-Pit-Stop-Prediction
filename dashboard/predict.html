@@ -68,14 +68,49 @@
       }
 
       .drop {
-        border: 1px dashed var(--borderHi); padding: 28px 20px;
+        position: relative;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 10px;
+        border: 1.5px dashed var(--borderHi);
+        padding: 56px 24px;
+        min-height: 200px;
         text-align: center; cursor: pointer;
-        transition: border-color 120ms, background 120ms;
+        transition: border-color 120ms, background 120ms, transform 120ms;
+        background: linear-gradient(180deg, rgba(255,255,255,0.012), transparent);
       }
-      .drop:hover, .drop.drag { border-color: var(--green); background: rgba(0,255,136,0.04); }
+      .drop:hover { border-color: var(--ink2); background: rgba(255,255,255,0.025); }
+      .drop.drag { border-color: var(--green); background: rgba(0,255,136,0.08); transform: scale(1.005); }
       .drop input[type=file] { display: none; }
-      .drop .hint { color: var(--muted); font-size: 12px; margin-top: 8px; font-family: var(--mono); }
-      .filename { font-family: var(--mono); font-size: 12px; color: var(--ink); margin-top: 6px; }
+      .drop .big-icon {
+        font-size: 36px; line-height: 1; color: var(--muted);
+        font-family: var(--mono); font-weight: 300;
+      }
+      .drop.drag .big-icon { color: var(--green); }
+      .drop .primary-text { font-size: 15px; color: var(--ink); font-weight: 500; }
+      .drop .or { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+      .drop .browse-cta {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 18px; border: 1px solid var(--ink2);
+        font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+        letter-spacing: 0.5px; text-transform: uppercase;
+        color: var(--ink); background: transparent;
+      }
+      .drop:hover .browse-cta { border-color: var(--ink); background: rgba(255,255,255,0.04); }
+      .drop .hint { color: var(--muted); font-size: 11.5px; font-family: var(--mono); margin-top: 4px; }
+      .filename { font-family: var(--mono); font-size: 12px; color: var(--green); }
+
+      /* Global drop overlay — appears when dragging a file anywhere on the page */
+      .global-overlay {
+        position: fixed; inset: 0; pointer-events: none;
+        background: rgba(0,255,136,0.06);
+        border: 3px dashed var(--green);
+        display: flex; align-items: center; justify-content: center;
+        font-family: var(--mono); font-size: 18px; color: var(--green);
+        letter-spacing: 2px; text-transform: uppercase; font-weight: 600;
+        opacity: 0; transition: opacity 120ms;
+        z-index: 9999;
+      }
+      .global-overlay.show { opacity: 1; }
 
       .row { display: flex; gap: 12px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
       button.primary, button.ghost {
@@ -135,8 +170,11 @@
         <div class="panel-title">1 · Upload CSV</div>
         <label class="drop" id="drop">
           <input type="file" id="file" accept=".csv,text/csv" />
-          <div style="font-size:13px; color:var(--ink);">Click to choose, or drag a CSV here</div>
-          <div class="hint">Required columns shown below</div>
+          <div class="big-icon">⤓</div>
+          <div class="primary-text">Drop a CSV here</div>
+          <div class="or">— or —</div>
+          <div class="browse-cta">📁 Browse files</div>
+          <div class="hint">You can also drop the file anywhere on this page</div>
           <div class="filename" id="filename"></div>
         </label>
         <code class="cols" id="cols">id, Driver, Compound, Race, Year, PitStop, LapNumber, Stint, TyreLife, Position, LapTime (s), LapTime_Delta, Cumulative_Degradation, RaceProgress, Position_Change
@@ -147,12 +185,15 @@ optional: PitNextLap (target column — if provided, F1 score is reported)</code
           <span class="status" id="status"></span>
         </div>
       </div>
+      <div class="global-overlay" id="overlay">drop CSV anywhere to upload</div>
 
       <div class="panel" id="results-panel" style="display:none;">
         <div class="panel-title">2 · Results</div>
         <div class="kpi-row" id="kpis"></div>
         <div class="row" style="margin-top:18px;">
+          <button class="primary" id="openDashboard">▦ Open in dashboard</button>
           <button class="ghost" id="download">⬇ Download CSV with pPit + pred</button>
+          <span class="status" id="loadStatus"></span>
         </div>
         <div class="table-wrap" style="margin-top:14px;">
           <table id="table"></table>
@@ -184,12 +225,52 @@ optional: PitNextLap (target column — if provided, F1 score is reported)</code
       }
 
       fileInput.addEventListener('change', (e) => setFile(e.target.files[0] || null));
+
+      // Local drop zone
       drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag'); });
-      drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+      drop.addEventListener('dragleave', (e) => {
+        // Only remove the highlight if leaving the drop zone (not entering a child)
+        if (e.target === drop) drop.classList.remove('drag');
+      });
       drop.addEventListener('drop', (e) => {
         e.preventDefault();
+        e.stopPropagation();
         drop.classList.remove('drag');
-        if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+        const f = e.dataTransfer.files[0];
+        if (f) setFile(f);
+      });
+
+      // Document-level drag-drop — accept the file dropped anywhere on the page.
+      const overlay = document.getElementById('overlay');
+      let dragDepth = 0;
+      const hasFileItem = (e) => {
+        const items = e.dataTransfer?.items;
+        if (!items) return true;
+        for (const it of items) if (it.kind === 'file') return true;
+        return false;
+      };
+      window.addEventListener('dragenter', (e) => {
+        if (!hasFileItem(e)) return;
+        e.preventDefault();
+        dragDepth++;
+        overlay.classList.add('show');
+      });
+      window.addEventListener('dragover', (e) => {
+        if (!hasFileItem(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      });
+      window.addEventListener('dragleave', (e) => {
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) overlay.classList.remove('show');
+      });
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragDepth = 0;
+        overlay.classList.remove('show');
+        drop.classList.remove('drag');
+        const f = e.dataTransfer?.files?.[0];
+        if (f) setFile(f);
       });
 
       sampleBtn.addEventListener('click', () => {
@@ -284,6 +365,114 @@ VER_13,VER,SOFT,Bahrain Grand Prix,2024,0,13,1,13,1,96.2,0.7,-4.2,0.255,0`;
         }
         tableEl.innerHTML = html;
       }
+
+      // ---- transform CSV rows into the dashboard's row shape ----------------
+      function normalizeCompound(c) {
+        if (c == null) return 'M';
+        const s = String(c).trim().toUpperCase();
+        if (s.startsWith('S')) return 'S';
+        if (s.startsWith('H')) return 'H';
+        if (s.startsWith('I')) return 'I';   // intermediate (rare)
+        if (s.startsWith('W')) return 'W';   // wet (rare)
+        return 'M';
+      }
+      function num(x, fallback = 0) {
+        const n = Number(x);
+        return Number.isFinite(n) ? n : fallback;
+      }
+      function buildRacePayload(rows, fallbackName) {
+        if (!rows.length) return null;
+        const first = rows[0];
+        const raceName = first.Race || first.race || fallbackName || 'Uploaded CSV';
+        const year = num(first.Year ?? first.year, new Date().getFullYear());
+
+        // group by driver to derive stints and isStintStart
+        const byDriver = new Map();
+        for (const r of rows) {
+          const d = String(r.Driver ?? r.driver ?? 'UNK');
+          if (!byDriver.has(d)) byDriver.set(d, []);
+          byDriver.get(d).push(r);
+        }
+        for (const arr of byDriver.values()) {
+          arr.sort((a, b) => num(a.LapNumber ?? a.lap) - num(b.LapNumber ?? b.lap));
+        }
+
+        const drivers = Array.from(byDriver.keys());
+        const driverMeta = drivers.map((id) => ({ id, short: id }));
+        const maxLap = Math.max(...rows.map((r) => num(r.LapNumber ?? r.lap, 1)));
+
+        const out = [];
+        for (const [driver, arr] of byDriver) {
+          let prevStint = null;
+          for (const r of arr) {
+            const stint = num(r.Stint ?? r.stint, 1);
+            const isStintStart = prevStint !== null && stint !== prevStint;
+            prevStint = stint;
+            out.push({
+              lap: num(r.LapNumber ?? r.lap, 1),
+              driver,
+              short: driver,
+              compound: normalizeCompound(r.Compound ?? r.compound),
+              stint,
+              tyreLife: num(r.TyreLife ?? r.tyreLife, 1),
+              lapTime: num(r['LapTime (s)'] ?? r.LapTime ?? r.lapTime, 0),
+              lapDelta: num(r.LapTime_Delta ?? r.lapDelta, 0),
+              cumDeg: num(r.Cumulative_Degradation ?? r.cumDeg, 0),
+              raceProg: num(r.RaceProgress ?? r.raceProg, 0),
+              position: num(r.Position ?? r.position, 0),
+              posChange: num(r.Position_Change ?? r.posChange, 0),
+              pPit: num(r.pPit, 0),
+              pred: num(r.pred, 0),
+              actual: num(r.PitNextLap ?? r.actual, 0),
+              isStintStart,
+            });
+          }
+        }
+
+        // ensure rows are sorted by lap then position for the wall mode
+        out.sort((a, b) => a.lap - b.lap || a.position - b.position);
+
+        // estimate baseTime as median of finite lap times
+        const lts = out.map((r) => r.lapTime).filter((x) => isFinite(x) && x > 0).sort((a,b)=>a-b);
+        const baseTime = lts.length ? lts[Math.floor(lts.length / 2)] : 90;
+
+        return {
+          id: 'uploaded',
+          name: raceName,
+          year,
+          laps: maxLap,
+          seed: 0,
+          baseTime,
+          focus: drivers[0],
+          compoundBias: drivers.map(() => 'M'),
+          drivers,
+          driverMeta,
+          stints: drivers.map(() => []),
+          rows: out,
+          uploadedAt: new Date().toISOString(),
+          uploadedFilename: pickedFile ? pickedFile.name : null,
+        };
+      }
+
+      const openDashBtn = document.getElementById('openDashboard');
+      const loadStatusEl = document.getElementById('loadStatus');
+      openDashBtn.addEventListener('click', () => {
+        if (!lastResult) return;
+        const payload = buildRacePayload(lastResult.rows, pickedFile?.name);
+        if (!payload) {
+          loadStatusEl.className = 'status err';
+          loadStatusEl.textContent = '✗ No rows to load';
+          return;
+        }
+        try {
+          localStorage.setItem('pp.uploadedRace', JSON.stringify(payload));
+        } catch (err) {
+          loadStatusEl.className = 'status err';
+          loadStatusEl.textContent = `✗ localStorage write failed: ${err.message}`;
+          return;
+        }
+        window.location.assign('/?race=uploaded');
+      });
 
       downloadBtn.addEventListener('click', () => {
         if (!lastResult) return;
