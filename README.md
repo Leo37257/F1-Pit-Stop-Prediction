@@ -5,7 +5,7 @@
 > Binary classifier predicting whether an F1 driver will pit on the **next** lap. Built on Kaggle Playground Series **S5E6** (2022–2025) — full MLOps loop from raw CSV to a live, deployable inference UI.
 
 <p align="center">
-  <a href="https://huggingface.co/spaces/T0MYYY/f1-pit-predictor"><img alt="Try it live" src="https://img.shields.io/badge/Try%20it%20live-▶-1f7a3d?style=flat-square&labelColor=2a323d"></a>
+  <a href="https://t0myyy-f1-pit-predictor.hf.space/"><img alt="Try it live" src="https://img.shields.io/badge/Try%20it%20live-▶-1f7a3d?style=flat-square&labelColor=2a323d"></a>
   <a href="https://huggingface.co/spaces/T0MYYY/f1-pit-predictor"><img alt="HF Space" src="https://img.shields.io/badge/🤗%20Space-running-FFD21E?style=flat-square&labelColor=2a323d"></a>
   <img alt="macro-F1" src="https://img.shields.io/badge/macro--F1-0.785-00aa55?style=flat-square&labelColor=2a323d">
   <img alt="ROC-AUC" src="https://img.shields.io/badge/ROC--AUC-0.894-00aa55?style=flat-square&labelColor=2a323d">
@@ -127,7 +127,6 @@ python -m src.inference --input data/train.csv --year 2025   # batch predict on 
 ### Run the full inference UI locally (mirror of the HF Space)
 
 ```bash
-git checkout dashboard            # full-stack assets live here
 pip install -r requirements.txt
 uvicorn src.api:app --host 0.0.0.0 --port 7860
 # Dashboard:   http://localhost:7860/
@@ -138,10 +137,11 @@ uvicorn src.api:app --host 0.0.0.0 --port 7860
 ### Reproduce the Docker deployment
 
 ```bash
-git checkout dashboard
 docker build -f deploy/hf/Dockerfile -t f1-pit-predictor .
 docker run -p 7860:7860 f1-pit-predictor
 ```
+
+Deploy to your own HF Space: `python deploy/hf/push_space.py` (needs `hf auth login` first, and the `REPO_ID` constant updated).
 
 ### Retrain
 
@@ -158,7 +158,7 @@ Or via Airflow (`docker compose up -d` → trigger `pit_stop_training` at <http:
 
 ## 🔌 API endpoints
 
-The dashboard branch's [`src/api.py`](https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction/blob/dashboard/src/api.py) exposes:
+[`src/api.py`](src/api.py) exposes:
 
 | Endpoint | Body | Use case |
 |---|---|---|
@@ -195,7 +195,7 @@ Three artifacts you already have:
 
 2. **`data/processed/test.parquet`** — the **2025 reference distribution** for feature-drift detection (Evidently AI's reference dataset slot, KS tests, PSI, etc.).
 
-3. **The deployed FastAPI** — wire request/prediction logging into [`src/api.py`](https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction/blob/dashboard/src/api.py) `predict_dashboard` / `predict_csv` to capture production inputs and predictions, then diff against the reference distribution.
+3. **The deployed FastAPI** — wire request/prediction logging into [`src/api.py`](src/api.py) `predict_dashboard` / `predict_csv` to capture production inputs and predictions, then diff against the reference distribution.
 
 ### Heads-up: the 2023 anomaly is not real drift
 
@@ -239,19 +239,17 @@ F1-Pit-Stop-Prediction/
 │   ├── train.py                   · FLAML per-algorithm AutoML, MLflow per-run logs
 │   ├── register.py                · Champion selection, MLflow Registry, export
 │   ├── inference.py               · prepare_features() · load_*_model() · CLI
-│   └── api.py                     · FastAPI app (full endpoint set on `dashboard` branch)
+│   └── api.py                     · FastAPI app — /predict, /predict/dashboard, /predict/csv
+├── dashboard/                     · React + Babel SPA (CDN, no build) + predict.html CSV page
+├── deploy/hf/                     · HF Docker Space — Dockerfile, requirements, push_space.py
 ├── dags/pit_stop_training_dag.py  · Airflow DAG — 4 BashOperators wrapping src.*
 ├── tests/                         · Import + config-path smoke tests
-├── models/champion/               · ⭐ Handoff payload (consumed by Members C and D)
+├── models/champion/               · ⭐ Handoff payload (consumed by API and by Member D)
 ├── docker-compose.yaml            · Airflow LocalExecutor + Postgres
 ├── Dockerfile                     · Training image (apache/airflow:2.9.3-python3.12 + ML deps)
 ├── dvc.yaml / dvc.lock            · DVC pipeline (ingest, preprocess stages)
 └── requirements.txt               · Pinned versions
 ```
-
-**Branch map.**
-- `main` — training pipeline, `/predict` API, this README.
-- `dashboard` — everything on main **+** dashboard UI **+** `/predict/dashboard` & `/predict/csv` **+** [`deploy/hf/`](https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction/tree/dashboard/deploy/hf) (HF Docker).
 
 ---
 
@@ -326,7 +324,7 @@ dvc repro                   # replays ingest + preprocess; doesn't run train/reg
 - **Don't `rm -rf mlflow/` while Docker is up.** Bring `docker compose down` first; the bind mount can go into a weird state otherwise.
 - **Switching host ↔ Docker for training:** wipe `mlflow/` and `mlruns/` between environments. `models/champion/` survives.
 - **GitHub flags `data/train.csv` as >50 MB.** Soft warning, not a block — committed for grader convenience.
-- **HF Space deploy needs `flaml` and `lightgbm`** even though the champion is XGBoost — the FLAML training wrapper leaves references in the pickle. See [`deploy/hf/requirements.txt`](https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction/blob/dashboard/deploy/hf/requirements.txt) on the `dashboard` branch.
+- **HF Space deploy needs `flaml` and `lightgbm`** even though the champion is XGBoost — the FLAML training wrapper leaves references in the pickle. See [`deploy/hf/requirements.txt`](deploy/hf/requirements.txt).
 
 ---
 
@@ -337,7 +335,7 @@ dvc repro                   # replays ingest + preprocess; doesn't run train/reg
 3. `python -m src.register` runs as the last DAG task; otherwise run manually.
 4. Inspect `models/champion/CHAMPION.json` — verify `test_macro_f1` beats the prior champion.
 5. `git add models/champion/ && git commit -m "Champion v{N}: {algo}, F1={X}"`.
-6. `git push` — Member C's HF Space picks it up on the next push from `dashboard`; Member D updates the drift baseline.
+6. `git push` — re-run `python deploy/hf/push_space.py` to ship the new champion to the live Space; Member D updates the drift baseline.
 
 ---
 
