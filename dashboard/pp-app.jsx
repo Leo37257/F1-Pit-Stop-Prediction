@@ -84,7 +84,7 @@ function attribution(row, baseRow) {
    AppBar — top chrome shared across modes
 ============================================================================ */
 
-function AppBar({ raceData, mode, setMode, threshold, onOpenSettings }) {
+function AppBar({ raceData, mode, setMode, threshold, onOpenSettings, useRealModel, setUseRealModel, loadingReal }) {
   return (
     <div
       style={{
@@ -177,6 +177,46 @@ function AppBar({ raceData, mode, setMode, threshold, onOpenSettings }) {
         <PPTag>xgboost v2</PPTag>
         <PPTag color={PP_T.ink2}>F1 0.785</PPTag>
         <PPTag color={PP_T.ink2}>τ {threshold.toFixed(2)}</PPTag>
+        <button
+          type="button"
+          onClick={() => setUseRealModel((v) => !v)}
+          title="Toggle live inference from the FastAPI backend (replaces synthetic pPit for the focus driver)"
+          style={{
+            border: `1px solid ${useRealModel ? PP_T.green : PP_T.borderHi}`,
+            background: useRealModel ? "rgba(0,255,136,0.08)" : "transparent",
+            color: useRealModel ? PP_T.green : PP_T.muted,
+            padding: "0 10px",
+            height: 24,
+            fontFamily: PP_MONO,
+            fontSize: 10.5,
+            fontWeight: 600,
+            cursor: "pointer",
+            letterSpacing: 0.5,
+            textTransform: "uppercase",
+          }}
+        >
+          {loadingReal ? "loading…" : (useRealModel ? "● real model" : "○ real model")}
+        </button>
+        <a
+          href="/predict.html"
+          style={{
+            border: `1px solid ${PP_T.borderHi}`,
+            background: "transparent",
+            color: PP_T.ink2,
+            padding: "0 10px",
+            height: 24,
+            display: "inline-flex",
+            alignItems: "center",
+            fontFamily: PP_MONO,
+            fontSize: 10.5,
+            fontWeight: 600,
+            textDecoration: "none",
+            letterSpacing: 0.5,
+            textTransform: "uppercase",
+          }}
+        >
+          ⇪ batch csv
+        </a>
         <PPBtn ghost icon="⚙" onClick={onOpenSettings}>settings</PPBtn>
       </div>
     </div>
@@ -427,8 +467,9 @@ function LapTrendPanel({ raceData, driver, currentLap }) {
   );
 }
 
-function FieldPanel({ raceData, currentLap, focusDriver, setFocusDriver, threshold }) {
-  const rows = PPData.getLap(raceData, currentLap);
+function FieldPanel({ raceData, currentLap, focusDriver, setFocusDriver, threshold, resolveRow }) {
+  const rawRows = PPData.getLap(raceData, currentLap);
+  const rows = resolveRow ? rawRows.map(resolveRow) : rawRows;
   const pitCalls = rows.filter((r) => r.pPit >= threshold).length;
   return (
     <PPPanel
@@ -496,8 +537,9 @@ function FieldPanel({ raceData, currentLap, focusDriver, setFocusDriver, thresho
   );
 }
 
-function ConsoleMode({ raceData, currentLap, focusDriver, setFocusDriver, threshold }) {
-  const focusRow = PPData.getRow(raceData, currentLap, focusDriver);
+function ConsoleMode({ raceData, currentLap, focusDriver, setFocusDriver, threshold, resolveRow }) {
+  const rawFocusRow = PPData.getRow(raceData, currentLap, focusDriver);
+  const focusRow = resolveRow ? resolveRow(rawFocusRow) : rawFocusRow;
   return (
     <>
       <TelemetryStrip row={focusRow} race={raceData} />
@@ -525,6 +567,7 @@ function ConsoleMode({ raceData, currentLap, focusDriver, setFocusDriver, thresh
             focusDriver={focusDriver}
             setFocusDriver={setFocusDriver}
             threshold={threshold}
+            resolveRow={resolveRow}
           />
         </div>
       </div>
@@ -924,13 +967,65 @@ function App() {
   const [currentLap, setCurrentLap] = useState(Math.round(raceData.laps * 0.35));
   const [focusDriver, setFocusDriver] = useState(raceData.focus || raceData.drivers[0]);
   const [playing, setPlaying] = useState(false);
+  const [useRealModel, setUseRealModel] = useState(false);
+  const [realPreds, setRealPreds] = useState({}); // {[driver]: {[lap]: {pPit, pred}}}
+  const [loadingReal, setLoadingReal] = useState(false);
 
   // When race changes, reset
   useEffect(() => {
     setCurrentLap(Math.round(raceData.laps * 0.35));
     setFocusDriver(raceData.focus || raceData.drivers[0]);
     setPlaying(false);
+    setRealPreds({});
   }, [tweaks.raceId]);
+
+  // Fetch real-model predictions for focusDriver when REAL MODEL is on
+  useEffect(() => {
+    if (!useRealModel) return;
+    if (realPreds[focusDriver]) return; // cached
+    const driverRows = PPData.getDriver(raceData, focusDriver);
+    setLoadingReal(true);
+    fetch("/predict/dashboard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        race: raceData.name,
+        year: raceData.year,
+        rows: driverRows.map((r) => ({
+          driver: r.driver,
+          lap: r.lap,
+          compound: r.compound,
+          stint: r.stint,
+          tyreLife: r.tyreLife,
+          lapTime: r.lapTime,
+          lapDelta: r.lapDelta,
+          cumDeg: r.cumDeg,
+          raceProg: r.raceProg,
+          position: r.position,
+          posChange: r.posChange,
+          isStintStart: r.isStintStart ?? false,
+        })),
+      }),
+    })
+      .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+      .then((data) => {
+        const byLap = {};
+        data.predictions.forEach(({ lap, pPit, pred }) => { byLap[lap] = { pPit, pred }; });
+        setRealPreds((prev) => ({ ...prev, [focusDriver]: byLap }));
+      })
+      .catch((err) => {
+        console.error("Real-model fetch failed:", err);
+        setUseRealModel(false);
+        alert(`Real-model inference failed: ${err.message}. Falling back to synthetic.`);
+      })
+      .finally(() => setLoadingReal(false));
+  }, [useRealModel, focusDriver, tweaks.raceId]);
+
+  function resolveRow(row) {
+    if (!row || !useRealModel) return row;
+    const override = realPreds[row.driver]?.[row.lap];
+    return override ? { ...row, ...override } : row;
+  }
 
   // Playback timer
   useEffect(() => {
@@ -981,7 +1076,7 @@ function App() {
         overflow: "hidden",
       }}
     >
-      <AppBar raceData={raceData} mode={mode} setMode={setMode} threshold={threshold} />
+      <AppBar raceData={raceData} mode={mode} setMode={setMode} threshold={threshold} useRealModel={useRealModel} setUseRealModel={setUseRealModel} loadingReal={loadingReal} />
       {mode === "console" ? (
         <ConsoleMode
           raceData={raceData}
@@ -989,6 +1084,7 @@ function App() {
           focusDriver={focusDriver}
           setFocusDriver={setFocusDriver}
           threshold={threshold}
+          resolveRow={resolveRow}
         />
       ) : (
         <WallMode
