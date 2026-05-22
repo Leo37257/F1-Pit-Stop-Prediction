@@ -21,3 +21,6 @@ notebooks/EDA_output/data/
 
 # Airflow runtime
 logs/
+
+# monitoring reports (HTML too large, keep JSON only)
+monitoring_reports/*.html

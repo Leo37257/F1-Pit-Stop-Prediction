@@ -1,0 +1,45 @@
+{
+  "data_source": {
+    "reference": "data/processed/train.parquet (Year 2022-2024)",
+    "current": "data/processed/test.parquet  (Year 2025)",
+    "note": "processed by team pipeline: ingest -> preprocess"
+  },
+  "feature_changes": {
+    "S2": "TyreLife += 20",
+    "S3": "Compound -> 'SOFT'",
+    "S4": "Cumulative_Degradation x 2.0"
+  },
+  "champion_baseline": {
+    "algorithm": "xgboost",
+    "test_macro_f1": 0.7852,
+    "test_roc_auc": 0.8945
+  },
+  "S1_original": {
+    "rows": 92894,
+    "f1_macro": 0.7852,
+    "roc_auc": 0.8945,
+    "pit_rate_actual": 0.2844,
+    "pit_rate_predicted": 0.2526
+  },
+  "S2_tyrelife_plus20": {
+    "rows": 92894,
+    "f1_macro": 0.6662,
+    "roc_auc": 0.8292,
+    "pit_rate_actual": 0.2844,
+    "pit_rate_predicted": 0.5474
+  },
+  "S3_compound": {
+    "rows": 92894,
+    "f1_macro": 0.7509,
+    "roc_auc": 0.8562,
+    "pit_rate_actual": 0.2844,
+    "pit_rate_predicted": 0.255
+  },
+  "S4_degradation": {
+    "rows": 92894,
+    "f1_macro": 0.7823,
+    "roc_auc": 0.8912,
+    "pit_rate_actual": 0.2844,
+    "pit_rate_predicted": 0.256
+  }
+}
