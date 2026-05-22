@@ -14,6 +14,7 @@
   <img alt="macro-F1" src="https://img.shields.io/badge/macro--F1-0.785-00aa55?style=flat-square&labelColor=2a323d">
   <img alt="ROC-AUC" src="https://img.shields.io/badge/ROC--AUC-0.894-00aa55?style=flat-square&labelColor=2a323d">
   <img alt="Status" src="https://img.shields.io/badge/Status-v2%20shipped-ec5800?style=flat-square&labelColor=2a323d">
+  <img alt="Monitoring" src="https://img.shields.io/badge/Monitoring-Evidently%200.4.33-7B68EE?style=flat-square&labelColor=2a323d">
   <img alt="PRs" src="https://img.shields.io/badge/PRs-welcome-1f7a3d?style=flat-square&labelColor=2a323d">
 </p>
 
@@ -58,17 +59,16 @@ flowchart LR
     A["<b>Member A</b><br/>EDA · features<br/>baseline<br/>✅ done"]
     B["<b>Member B</b><br/>Training pipeline<br/>Airflow · MLflow<br/>✅ done"]
     C["<b>Member C</b><br/>FastAPI · Dashboard<br/>HF Space deploy<br/>✅ done"]
-    D["<b>Member D</b><br/>Drift monitoring<br/>Alerting · Reports<br/>🟡 next"]
+    D["<b>Member D</b><br/>Drift monitoring<br/>Evidently · Reports<br/>✅ done"]
 
     A --> B --> C --> D
 
     classDef done fill:#0a3d1f,stroke:#1f7a3d,color:#dff5e7,stroke-width:1px;
     classDef todo fill:#3d2a0a,stroke:#7a5b1f,color:#f5e7c7,stroke-width:1px;
-    class A,B,C done
-    class D todo
+    class A,B,C,D done
 ```
 
-A → B → C is shipped (dashboard, REAL MODEL toggle, CSV batch UI, Docker deploy on HF). D is the next handoff — jump to [§ For Member D](#-for-member-d--drift-monitoring).
+All four members are done. Full MLOps loop: EDA → training pipeline → deployment → drift monitoring.
 
 ---
 
@@ -97,19 +97,19 @@ flowchart TB
         api --> ui[["dashboard/<br/>React + Babel SPA<br/>+ predict.html"]]
     end
 
-    subgraph MONITOR ["Monitoring — Member D (TODO)"]
+    subgraph MONITOR ["Monitoring — Member D"]
         direction LR
-        champ -.->|baseline metrics<br/>+ data hashes| drift[["Evidently / custom<br/>drift dashboards"]]
-        ep1 -.->|prod requests/preds<br/>logged to disk| drift
-        trainparq -.->|reference distribution| drift
+        trainparq -.->|"reference Year 2022-2024"| mon[["monitoring/<br/>model_monitoring.py<br/><i>Evidently AI</i>"]]
+        champ -.->|"champion XGBoost Pipeline"| mon
+        mon --> s1["S1 · original test<br/><i>F1=0.785  AUC=0.894</i>"]
+        mon --> s2["S2 · TyreLife +20<br/><i>F1=0.666 ↓  pit%=55%</i>"]
+        mon --> s3["S3 · Compound→SOFT<br/><i>F1=0.751 ↓</i>"]
+        mon --> s4["S4 · Degradation ×2<br/><i>F1=0.782 ≈</i>"]
+        s1 & s2 & s3 & s4 --> rep[/"monitoring_reports/<br/>4 × HTML + metrics_summary.json"/]
     end
 
     classDef done fill:#0a3d1f,stroke:#1f7a3d,color:#dff5e7;
-    classDef todo fill:#3d2a0a,stroke:#7a5b1f,color:#f5e7c7;
-    class champ done
-    class drift todo
 ```
-
 ---
 
 ## ⚡ Quick start
@@ -186,50 +186,49 @@ probs = model.predict_proba(features_df)[:, 1]   # raw probabilities
 
 ---
 
-## 🟡 For Member D — drift monitoring
+## Model Monitoring
 
-> **Status: not started.** Hooks and baselines are in place; the monitor itself is yours to build.
+Drift monitoring is implemented in [`monitoring/model_monitoring.py`](monitoring/model_monitoring.py) using **Evidently AI**.
 
-Three artifacts you already have:
+### How it works
 
-1. **`models/champion/CHAMPION.json`** — drift baseline:
-   - `metrics.test_macro_f1`, `metrics.test_roc_auc` → performance floor to alert against
-   - `training_data.train_parquet_sha256` / `test_parquet_sha256` → identity hashes. Recompute on incoming data and compare; divergence ≠ drift but tells you the dataset changed.
-   - `algorithm`, `best_hyperparams`, `trained_at_utc`, `git_sha`, `registered_version` → provenance for the alert payload.
+The script reuses the team's existing pipeline (`src.ingest` + `src.preprocess`) to generate processed data, then runs four monitoring scenarios against the deployed champion model:
 
-2. **`data/processed/test.parquet`** — the **2025 reference distribution** for feature-drift detection (Evidently AI's reference dataset slot, KS tests, PSI, etc.).
+| Scenario | Change |
+|---|---|
+| S1 | Original test data (Year 2025), no changes |
+| S2 | `TyreLife += 20` |
+| S3 | `Compound → SOFT` |
+| S4 | `Cumulative_Degradation × 2` |
 
-3. **The deployed FastAPI** — wire request/prediction logging into [`src/api.py`](src/api.py) `predict_dashboard` / `predict_csv` to capture production inputs and predictions, then diff against the reference distribution.
+S2 / S3 / S4 are **independent** (each starts from the original test data), so you can see the isolated impact of each feature change.
 
-### Heads-up: the 2023 anomaly is not real drift
+### Results
+
+| Scenario | F1-macro | ROC-AUC | Pit% predicted |
+|---|---:|---:|---:|
+| Champion (train eval) | 0.7852 | 0.8945 | — |
+| S1 original test | 0.7852 | 0.8945 | 25.3% |
+| S2 TyreLife +20 | 0.6662 | 0.8292 | 54.7% |
+| S3 Compound→SOFT | 0.7509 | 0.8562 | 25.5% |
+| S4 Degradation ×2 | 0.7823 | 0.8912 | 25.6% |
+
+**Key finding:** `TyreLife` is the most sensitive feature. A +20 shift causes F1 to drop by **−0.119** and pit prediction rate to jump from 25% to 55%. `Compound` has a moderate effect (−0.034). `Cumulative_Degradation` has minimal impact (−0.003), which means the model compensates via correlated features.
+
+### Run
+
+```bash
+pip install evidently==0.4.33
+python monitoring/model_monitoring.py
+```
+
+Reports are saved to `monitoring_reports/` (4 HTML files + `metrics_summary.json`). Open any HTML in a browser to see the full Evidently dashboard with Data Quality, Data Drift, and Classification panels.
+
+### Note on the 2023 anomaly
 
 Year 2023 has ~0.96% pit-next-lap rate vs ~28% in 2022/2024/2025 — a **Kaggle Playground synthetic artifact**, not actual drift. Member A flagged this in [`notebooks/EDA.ipynb`](notebooks/EDA.ipynb) §7. If your dashboard slices by year, label it as `data-source artifact, not model drift` so the on-call doesn't chase a ghost.
 
-### Suggested architecture
-
-```mermaid
-flowchart LR
-    prod["FastAPI<br/>/predict/csv<br/>/predict/dashboard"] -- log inputs + preds --> store[("requests/<br/>predictions log")]
-    ref[("data/processed/<br/>test.parquet<br/><i>reference</i>")] --> evd[["Evidently AI<br/>or scikit drift checks"]]
-    store --> evd
-    champ_json[["CHAMPION.json<br/><i>F1 / AUC baseline</i>"]] --> alert{{"PagerDuty /<br/>Slack webhook"}}
-    evd -- drift report --> alert
-    evd -- HTML reports --> dash[/"monitoring<br/>dashboard"/]
-
-    classDef todo fill:#3d2a0a,stroke:#7a5b1f,color:#f5e7c7;
-    class evd,alert,dash,store todo
-```
-
-### What "done" looks like
-- [ ] Production prediction log persisted (jsonl or parquet, daily-rotated)
-- [ ] Nightly job comparing today's feature distribution to `data/processed/test.parquet`
-- [ ] Alert when macro-F1 drops > 5% below `CHAMPION.json.metrics.test_macro_f1` on any labeled holdout
-- [ ] Dashboard or HTML report showing top-N drifted features per day
-- [ ] Runbook for the 2023-style false-positive case
-
----
-
-## 📂 Repository layout
+### Repository layout
 
 ```
 F1-Pit-Stop-Prediction/
@@ -248,7 +247,10 @@ F1-Pit-Stop-Prediction/
 ├── deploy/hf/                     · HF Docker Space — Dockerfile, requirements, push_space.py
 ├── dags/pit_stop_training_dag.py  · Airflow DAG — 4 BashOperators wrapping src.*
 ├── tests/                         · Import + config-path smoke tests
-├── models/champion/               · ⭐ Handoff payload (consumed by API and by Member D)
+├── models/champion/               · Handoff payload (consumed by API and monitoring)
+├── monitoring/
+│   └── model_monitoring.py        · Evidently AI drift monitoring (4 scenarios)
+├── monitoring_reports/            · Generated HTML reports + metrics_summary.json
 ├── docker-compose.yaml            · Airflow LocalExecutor + Postgres
 ├── Dockerfile                     · Training image (apache/airflow:2.9.3-python3.12 + ML deps)
 ├── dvc.yaml / dvc.lock            · DVC pipeline (ingest, preprocess stages)
@@ -264,7 +266,6 @@ F1-Pit-Stop-Prediction/
 | 1 | catboost | 0.7834 | 0.8944 | Host-trained, 600s budget. v1 register. |
 | **2** | **xgboost** | **0.7852** | **0.8945** | First DAG-trained champion. Currently deployed. |
 
-**Baseline (Member A's TyreLife≥25 heuristic):** macro-F1 ≥ 0.6122, ROC-AUC ≥ 0.7394. Both champions clear it by **+0.17 / +0.15**.
 
 ---
 
