@@ -78,6 +78,20 @@ flowchart TB
         champ -.->|"champion model"| mon
         mon --> rep[/"monitoring_reports/\n4 × HTML + metrics_summary.json"/]
     end
+
+    classDef dataNode    fill:#1e3a5f,stroke:#4a90d9,color:#cce4ff
+    classDef processNode fill:#0a3d1f,stroke:#27ae60,color:#c8f7dc
+    classDef storageNode fill:#3d2600,stroke:#e67e22,color:#fdebd0
+    classDef champNode   fill:#3d0000,stroke:#e74c3c,color:#f5b7b1,font-weight:bold
+    classDef serveNode   fill:#1a1a4a,stroke:#8e44ad,color:#e8daef
+    classDef monNode     fill:#2d1b4e,stroke:#9b59b6,color:#e8daef
+
+    class raw dataNode
+    class ingest,prep,trn,reg processNode
+    class parq,trainparq,mlflow storageNode
+    class champ champNode
+    class api,ep1,ep2,ep3,ui serveNode
+    class mon,rep monNode
 ```
 
 ---
