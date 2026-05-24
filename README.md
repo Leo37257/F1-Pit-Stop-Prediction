@@ -82,6 +82,36 @@ flowchart TB
 
 ---
 
+## 📂 Repository Layout
+
+```
+F1-Pit-Stop-Prediction/
+├── data/                          · Raw Kaggle CSVs + DVC-tracked outputs
+├── notebooks/                     · EDA + feature-engineering source of truth
+├── src/
+│   ├── config.py                  · Paths, MLflow URI, RANDOM_SEED, AutoML config
+│   ├── ingest.py                  · CSV → parquet (16-column schema check)
+│   ├── feature_engineering.py     · add_features() — verbatim port of EDA notebook
+│   ├── preprocess.py              · FE + year split + build_preprocessor()
+│   ├── train.py                   · FLAML per-algorithm AutoML, MLflow per-run logs
+│   ├── register.py                · Champion selection, MLflow Registry, export
+│   ├── inference.py               · prepare_features() · load_*_model() · CLI
+│   └── api.py                     · FastAPI app — /predict, /predict/dashboard, /predict/csv
+├── dashboard/                     · React + Babel SPA (CDN, no build) + predict.html
+├── deploy/hf/                     · HF Docker Space — Dockerfile, requirements, push_space.py
+├── dags/pit_stop_training_dag.py  · Airflow DAG — 4 BashOperators wrapping src.*
+├── tests/                         · Import + config-path smoke tests
+├── models/champion/               · Deployed champion (XGBoost pyfunc + CHAMPION.json)
+├── monitoring/
+│   └── model_monitoring.py        · Evidently AI drift monitoring (4 scenarios)
+├── monitoring_reports/            · Generated HTML reports + metrics_summary.json
+├── docker-compose.yaml            · Airflow LocalExecutor + Postgres
+├── dvc.yaml / dvc.lock            · DVC pipeline (ingest, preprocess stages)
+└── requirements.txt               · Pinned versions
+```
+
+---
+
 ## 👥 Team
 
 | Name | Contribution |
@@ -90,6 +120,23 @@ flowchart TB
 | **Zihao Huang** | Training pipeline — Airflow DAG, MLflow experiment tracking, DVC |
 | **Tom Chen** | FastAPI serving, React dashboard, Hugging Face Space deployment |
 | **Leo Liu** | Model monitoring — Evidently AI drift scenarios |
+
+---
+
+## 📄 Dataset & License
+
+Competition: **Predicting F1 Pit Stops** — Kaggle Playground Series.
+Dataset license: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (Attribution 4.0 International).
+
+```bibtex
+@misc{playground-series-s6e5,
+    author = {Yao Yan, Walter Reade, Elizabeth Park},
+    title = {Predicting F1 Pit Stops},
+    year = {2026},
+    howpublished = {\url{https://kaggle.com/competitions/playground-series-s6e5}},
+    note = {Kaggle}
+}
+```
 
 ---
 
@@ -242,36 +289,6 @@ dvc repro   # replays ingest + preprocess; does not run train/register
 
 ---
 
-## 📂 Repository Layout
-
-```
-F1-Pit-Stop-Prediction/
-├── data/                          · Raw Kaggle CSVs + DVC-tracked outputs
-├── notebooks/                     · EDA + feature-engineering source of truth
-├── src/
-│   ├── config.py                  · Paths, MLflow URI, RANDOM_SEED, AutoML config
-│   ├── ingest.py                  · CSV → parquet (16-column schema check)
-│   ├── feature_engineering.py     · add_features() — verbatim port of EDA notebook
-│   ├── preprocess.py              · FE + year split + build_preprocessor()
-│   ├── train.py                   · FLAML per-algorithm AutoML, MLflow per-run logs
-│   ├── register.py                · Champion selection, MLflow Registry, export
-│   ├── inference.py               · prepare_features() · load_*_model() · CLI
-│   └── api.py                     · FastAPI app — /predict, /predict/dashboard, /predict/csv
-├── dashboard/                     · React + Babel SPA (CDN, no build) + predict.html
-├── deploy/hf/                     · HF Docker Space — Dockerfile, requirements, push_space.py
-├── dags/pit_stop_training_dag.py  · Airflow DAG — 4 BashOperators wrapping src.*
-├── tests/                         · Import + config-path smoke tests
-├── models/champion/               · Deployed champion (XGBoost pyfunc + CHAMPION.json)
-├── monitoring/
-│   └── model_monitoring.py        · Evidently AI drift monitoring (4 scenarios)
-├── monitoring_reports/            · Generated HTML reports + metrics_summary.json
-├── docker-compose.yaml            · Airflow LocalExecutor + Postgres
-├── dvc.yaml / dvc.lock            · DVC pipeline (ingest, preprocess stages)
-└── requirements.txt               · Pinned versions
-```
-
----
-
 ## ⚠️ Gotchas
 
 - **First Docker build is ~10 min** (catboost + xgboost + lightgbm + arm64 wheels). Cached afterward.
@@ -294,21 +311,4 @@ F1-Pit-Stop-Prediction/
 
 ---
 
-## 📄 Dataset & License
-
-Competition: **Predicting F1 Pit Stops** — Kaggle Playground Series.
-Dataset license: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (Attribution 4.0 International).
-
-```bibtex
-@misc{playground-series-s6e5,
-    author = {Yao Yan, Walter Reade, Elizabeth Park},
-    title = {Predicting F1 Pit Stops},
-    year = {2026},
-    howpublished = {\url{https://kaggle.com/competitions/playground-series-s6e5}},
-    note = {Kaggle}
-}
-```
-
----
-
-<sub>Banner: Pirelli F1 tyre range (Soft · Medium · Hard · Intermediate · Wet). Photo via Wikimedia Commons, CC BY-SA.</sub>
+*Banner: Pirelli F1 tyre range (Soft · Medium · Hard · Intermediate · Wet). Photo via Wikimedia Commons, CC BY-SA.*
