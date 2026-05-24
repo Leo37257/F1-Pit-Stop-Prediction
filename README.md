@@ -125,18 +125,7 @@ F1-Pit-Stop-Prediction/
 
 ## 📄 Dataset & License
 
-Competition: **Predicting F1 Pit Stops** — Kaggle Playground Series.
-Dataset license: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (Attribution 4.0 International).
-
-```bibtex
-@misc{playground-series-s6e5,
-    author = {Yao Yan, Walter Reade, Elizabeth Park},
-    title = {Predicting F1 Pit Stops},
-    year = {2026},
-    howpublished = {\url{https://kaggle.com/competitions/playground-series-s6e5}},
-    note = {Kaggle}
-}
-```
+Dataset: [Predicting F1 Pit Stops](https://kaggle.com/competitions/playground-series-s6e5) — Yao Yan, Walter Reade & Elizabeth Park (Kaggle Playground Series, 2026). Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ---
 
