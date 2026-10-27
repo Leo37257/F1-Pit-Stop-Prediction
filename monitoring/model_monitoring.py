@@ -20,8 +20,9 @@ S2 / S3 / S4 are all independent (each starts from the original test data).
 
 Run
 ───
-  pip install evidently==0.4.33
-  python monitoring.py
+  pip install -r requirements.txt
+  python monitoring/model_monitoring.py                 # always exits 0
+  python monitoring/model_monitoring.py --fail-on alert # exit 1 if any scenario is an alert (for CI / Airflow)
 
 Outputs → monitoring_reports/
   scenario_1_original.html
@@ -60,6 +61,7 @@ logging.basicConfig(level=logging.WARNING)
 
 from src import config                        
 from src import ingest, preprocess           
+from monitoring import drift_checks as dc
 
 OUT_DIR = ROOT / "monitoring_reports"
 OUT_DIR.mkdir(exist_ok=True)
@@ -200,7 +202,27 @@ def change_C(df: pd.DataFrame) -> pd.DataFrame:
 
 # Main
 
-def main() -> None:
+def scenario_alerts(ref_df: pd.DataFrame, scenarios: dict, results: dict) -> dict:
+    """For each injected change: how far the changed feature moved (PSI) and how much macro-F1 it cost.
+
+    Both are reported because they disagree: a feature can drift hard without hurting the model (S4),
+    and a moderate drift on an important feature can hurt it a lot (S2).
+    """
+    base_f1 = results["S1_original"]["f1_macro"]
+    out = {}
+    for key, (frame, feature) in scenarios.items():
+        if feature in CATEGORICAL_FEATURES:
+            psi = dc.psi_categorical(ref_df[feature], frame[feature])
+        else:
+            psi = dc.psi_numeric(ref_df[feature], frame[feature])
+        perf = dc.performance_status(base_f1, results[key]["f1_macro"])
+        out[key] = {"feature": feature, "psi": round(psi, 4), "drift_status": dc.classify_psi(psi),
+                    "f1_drop": perf["f1_drop"], "performance_status": perf["status"],
+                    "status": dc.worst_status([dc.classify_psi(psi), perf["status"]])}
+    return out
+
+
+def main(fail_on: str = "never") -> int:
     # setup 
     ensure_processed_data()
     model = load_model()
@@ -259,6 +281,13 @@ def main() -> None:
     print(f"   F1-macro={m['f1_macro']}   AUC={m['roc_auc']}   pit_pred={m['pit_rate_predicted']:.1%}")
     build_report(ref_monitor, s4, OUT_DIR / "scenario_4_degradation.html", "S4 Degradation x2")
 
+    alerts = scenario_alerts(ref_df, {
+        "S2_tyrelife_plus20": (s2_df, "TyreLife"),
+        "S3_compound":        (s3_df, "Compound"),
+        "S4_degradation":     (s4_df, "Cumulative_Degradation"),
+    }, results)
+    overall = dc.worst_status(a["status"] for a in alerts.values())
+
     # summary JSON 
     summary = {
         "data_source": {
@@ -277,6 +306,10 @@ def main() -> None:
             "test_roc_auc":  0.8945,
         },
         **results,
+        "thresholds": {"psi_warn": dc.PSI_WARN, "psi_alert": dc.PSI_ALERT,
+                       "f1_drop_warn": dc.F1_DROP_WARN, "f1_drop_alert": dc.F1_DROP_ALERT},
+        "alerts": alerts,
+        "status": overall,
     }
     p = OUT_DIR / "metrics_summary.json"
     p.write_text(json.dumps(summary, indent=2))
@@ -307,8 +340,22 @@ def main() -> None:
         delta = results[key]["f1_macro"] - s1m["f1_macro"]
         print(f"  {label}: {s1m['f1_macro']} -> {results[key]['f1_macro']}  (delta {delta:+.4f})")
 
+    print("\nAlerts (feature drift vs F1 cost):")
+    for key, a in alerts.items():
+        print(f"  {key:<20} {a['feature']:<24} PSI {a['psi']:>6.3f} ({a['drift_status']:<5})  "
+              f"F1 drop {a['f1_drop']:+.4f} ({a['performance_status']:<5})  -> {a['status'].upper()}")
+    print(f"Overall: {overall.upper()}")
     print("\nOpen monitoring_reports/*.html in a browser to see Evidently dashboards.")
+
+    levels = {"never": 99, "alert": 3, "warn": 2}
+    rank = {"ok": 1, "warn": 2, "alert": 3}
+    return 1 if rank.get(overall, 0) >= levels[fail_on] else 0
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Evidently drift scenarios for the champion model")
+    parser.add_argument("--fail-on", choices=["never", "warn", "alert"], default="never",
+                        help="exit with code 1 when the overall status reaches this level")
+    sys.exit(main(parser.parse_args().fail_on))
