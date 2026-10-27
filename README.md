@@ -7,13 +7,14 @@
 > **Team lead.** I designed the end-to-end architecture (data and features → AutoML training pipeline → FastAPI serving
 > → drift monitoring) and the hand-offs between the four parts, and I built the monitoring part myself: Evidently drift
 > scenarios, then, after the course, model-free drift checks with alert thresholds, a natural-drift analysis of the 2025
-> season, per-compound and per-race performance slices, and an exit code so CI or Airflow can stop on an alert.
+> season, per-compound and per-race performance slices, monitoring tasks in the Airflow DAG, and a decision threshold
+> chosen out-of-fold that lifts the served model's macro-F1 from 0.785 to 0.801.
 > See [Model Monitoring](#-model-monitoring). — Leo Liu
 
 <p align="center">
   <a href="https://t0myyy-f1-pit-predictor.hf.space/"><img alt="Try it live" src="https://img.shields.io/badge/Try%20it%20live-▶-1f7a3d?style=flat-square&labelColor=2a323d"></a>
   <a href="https://huggingface.co/spaces/T0MYYY/f1-pit-predictor"><img alt="HF Space" src="https://img.shields.io/badge/🤗%20Space-running-FFD21E?style=flat-square&labelColor=2a323d"></a>
-  <img alt="macro-F1" src="https://img.shields.io/badge/macro--F1-0.785-00aa55?style=flat-square&labelColor=2a323d">
+  <img alt="macro-F1" src="https://img.shields.io/badge/macro--F1-0.801-00aa55?style=flat-square&labelColor=2a323d">
   <img alt="ROC-AUC" src="https://img.shields.io/badge/ROC--AUC-0.894-00aa55?style=flat-square&labelColor=2a323d">
   <img alt="Status" src="https://img.shields.io/badge/Status-v2%20shipped-ec5800?style=flat-square&labelColor=2a323d">
   <img alt="Monitoring" src="https://img.shields.io/badge/Monitoring-Evidently%200.4.33-7B68EE?style=flat-square&labelColor=2a323d">
@@ -219,9 +220,30 @@ probs = model.predict_proba(features_df)[:, 1]
 | Version | Algorithm | macro-F1 | ROC-AUC | Notes |
 |---|---|---:|---:|---|
 | 1 | CatBoost | 0.7834 | 0.8944 | Host-trained, 600s budget |
-| **2 (current)** | **XGBoost** | **0.7852** | **0.8945** | DAG-trained champion, deployed |
+| 2 | XGBoost | 0.7852 | 0.8945 | DAG-trained champion, threshold 0.5 |
+| **2 + tuned threshold (current)** | **XGBoost** | **0.8009** | **0.8945** | Same model, decision threshold 0.36 chosen out-of-fold (see below) |
 
 ---
+
+## 🎯 Decision Threshold and Calibration
+
+The champion predicted a pit on 25.3% of 2025 laps against an actual 28.4%: at the default 0.5 cut-off it is too
+cautious. [`evaluation/threshold_tuning.py`](evaluation/threshold_tuning.py) picks the cut-off **without looking at 2025**:
+
+1. Refit the champion's exact configuration (same preprocessor, same XGBoost hyper-parameters) in 5 folds grouped by
+   season and race, giving out-of-fold probabilities for every 2022–2024 lap.
+2. Choose the threshold that maximises macro-F1 on 2022 and 2024 only (2023 is the synthetic season with a 1% pit rate).
+3. Apply it once to the champion on 2025.
+
+| | Threshold | macro-F1 | Pit% predicted |
+|---|---:|---:|---:|
+| Out-of-fold 2022 + 2024 | 0.50 → **0.36** | 0.775 → 0.786 | |
+| Test 2025 | 0.50 → **0.36** | 0.785 → **0.801** | 25.3% → 32.1% (actual 28.4%) |
+
+ROC-AUC is unchanged (0.894) because the ranking is the same model; only the cut-off moved. Calibration is reasonable
+(Brier 0.117 on 2025; mean predicted probability 0.258 against an observed 0.284, so slightly under-confident).
+The threshold is stored in `models/champion/CHAMPION.json` and used by the API, the CLI and the monitoring scripts,
+so what is monitored is what is served.
 
 ## 📊 Model Monitoring
 
@@ -229,12 +251,12 @@ Drift monitoring is implemented in [`monitoring/model_monitoring.py`](monitoring
 
 | Scenario | Change | macro-F1 | ROC-AUC | Pit% predicted |
 |---|---|---:|---:|---:|
-| S1 | Original test data | 0.785 | 0.894 | 25.3% |
-| S2 | TyreLife +20 | 0.666 | 0.829 | **54.7%** |
-| S3 | Compound → SOFT | 0.751 | 0.856 | 25.5% |
-| S4 | Degradation ×2 | 0.782 | 0.891 | 25.6% |
+| S1 | Original test data | 0.801 | 0.894 | 32.1% |
+| S2 | TyreLife +20 | 0.594 | 0.829 | **65.0%** |
+| S3 | Compound → SOFT | 0.760 | 0.856 | 35.5% |
+| S4 | Degradation ×2 | 0.798 | 0.891 | 32.4% |
 
-**Key finding:** `TyreLife` is the most sensitive feature. A +20 lap shift drops F1 by 0.119 and more than doubles the predicted pit rate (25% → 55%). Any upstream data error in TyreLife should trigger an immediate alert. `Compound` has a moderate effect (−0.034 F1); `Cumulative_Degradation` is robust (−0.003), compensated by correlated features.
+**Key finding:** `TyreLife` is the most sensitive feature. A +20 lap shift drops F1 by 0.207 and doubles the predicted pit rate (32% → 65%). Any upstream data error in TyreLife should trigger an immediate alert. `Compound` has a moderate effect (−0.041 F1); `Cumulative_Degradation` is robust (−0.003), compensated by correlated features.
 
 ```bash
 pip install -r requirements.txt
@@ -243,12 +265,16 @@ python monitoring/model_monitoring.py --fail-on alert  # exit 1 on an alert, for
 python monitoring/natural_drift.py                     # real 2025 drift + slice performance (no injected change)
 ```
 
+**In Airflow** the training DAG now ends with two monitoring tasks on the new champion: `monitor_drift` runs the
+natural-drift check and **fails the run if macro-F1 drops past the alert line** (feature drift alone only warns, since
+features drift every season and the model has held up), and `stress_test` runs the four scenarios for reference.
+
 **Each scenario now gets two verdicts** (`metrics_summary.json` → `alerts`), because they disagree:
 
 | Scenario | Changed feature | PSI | macro-F1 drop | Verdict |
 |---|---|---:|---:|---|
-| S2 TyreLife +20 | TyreLife | 6.11 | 0.119 | drift alert, performance alert |
-| S3 Compound → SOFT | Compound | 9.71 | 0.034 | drift alert, performance warn |
+| S2 TyreLife +20 | TyreLife | 6.11 | 0.207 | drift alert, performance alert |
+| S3 Compound → SOFT | Compound | 9.71 | 0.041 | drift alert, performance warn |
 | S4 Degradation ×2 | Cumulative_Degradation | 1.56 | 0.003 | drift alert, **no** performance cost |
 
 Thresholds live in [`monitoring/drift_checks.py`](monitoring/drift_checks.py): PSI 0.10 warn / 0.25 alert, macro-F1 drop
@@ -260,12 +286,12 @@ Thresholds live in [`monitoring/drift_checks.py`](monitoring/drift_checks.py): P
 (outputs: `natural_drift.json`, `drift_by_feature.csv`, `slice_performance.csv`).
 
 * **Features moved, the model held.** 11 of 31 features cross PSI 0.25 against 2022–2024 (Cumulative_Degradation 0.83,
-  LapTime_Delta 0.64), while macro-F1 stays at 0.785.
+  LapTime_Delta 0.64), while macro-F1 stays at 0.801.
 * **The pooled reference exaggerates drift.** Against 2024 alone only 5 features alert: the 2022–2024 reference includes the
   synthetic 2023 season (pit rate 1.0% vs 27–30%). Season to season, 2024 → 2025 is the calmest change (median PSI 0.08,
   against 0.19 for both transitions touching 2023). Monitoring should use the latest clean season as its baseline.
-* **Where accuracy is lost.** SOFT-tyre laps score macro-F1 0.70 against 0.77 on MEDIUM; six races fall below the alert line,
-  worst Miami (0.63), Australia (0.67) and Mexico City (0.68). These slices, not the global score, are what to watch.
+* **Where accuracy is lost.** SOFT-tyre laps score macro-F1 0.72 against 0.80 on MEDIUM; six races fall below the alert line,
+  worst Miami (0.61), Australia (0.65) and Austria (0.69). These slices, not the global score, are what to watch.
 
 ### Note on the 2023 anomaly
 
