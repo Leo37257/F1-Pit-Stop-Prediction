@@ -12,8 +12,8 @@
 > See [Model Monitoring](#-model-monitoring). — Leo Liu
 
 <p align="center">
-  <a href="https://t0myyy-f1-pit-predictor.hf.space/"><img alt="Try it live" src="https://img.shields.io/badge/Try%20it%20live-▶-1f7a3d?style=flat-square&labelColor=2a323d"></a>
-  <a href="https://huggingface.co/spaces/T0MYYY/f1-pit-predictor"><img alt="HF Space" src="https://img.shields.io/badge/🤗%20Space-running-FFD21E?style=flat-square&labelColor=2a323d"></a>
+  <a href="https://f1-pit-predictor-6u64.onrender.com/"><img alt="Try it live" src="https://img.shields.io/badge/Try%20it%20live-▶-1f7a3d?style=flat-square&labelColor=2a323d"></a>
+  <a href="https://f1-pit-predictor-6u64.onrender.com/health"><img alt="Render" src="https://img.shields.io/badge/Render-live-46E3B7?style=flat-square&logo=render&logoColor=black&labelColor=2a323d"></a>
   <img alt="macro-F1" src="https://img.shields.io/badge/macro--F1-0.801-00aa55?style=flat-square&labelColor=2a323d">
   <img alt="ROC-AUC" src="https://img.shields.io/badge/ROC--AUC-0.894-00aa55?style=flat-square&labelColor=2a323d">
   <img alt="Status" src="https://img.shields.io/badge/Status-v2%20shipped-ec5800?style=flat-square&labelColor=2a323d">
@@ -45,10 +45,12 @@
 
 | | URL |
 |---|---|
-| **Dashboard (HF Space)** | <https://huggingface.co/spaces/T0MYYY/f1-pit-predictor> |
-| **Direct app URL** | <https://t0myyy-f1-pit-predictor.hf.space> |
-| **CSV batch inference** | <https://t0myyy-f1-pit-predictor.hf.space/predict.html> |
-| **Health check** | <https://t0myyy-f1-pit-predictor.hf.space/health> |
+| **Dashboard** | <https://f1-pit-predictor-6u64.onrender.com/> |
+| **CSV batch inference** | <https://f1-pit-predictor-6u64.onrender.com/predict.html> |
+| **Health check** | <https://f1-pit-predictor-6u64.onrender.com/health> |
+
+Hosted on Render's free plan ([`render.yaml`](render.yaml)): the service sleeps after about 15 idle minutes, so the
+first request can take around half a minute. It serves the champion at its tuned decision threshold (0.36).
 
 `GET /` is the race-playback dashboard — the `REAL MODEL` toggle swaps synthetic predictions for live `predict_proba` calls. `GET /predict.html` is the drag-and-drop CSV inference page.
 
@@ -185,7 +187,9 @@ docker build -f deploy/hf/Dockerfile -t f1-pit-predictor .
 docker run -p 7860:7860 f1-pit-predictor
 ```
 
-Deploy to your own HF Space: `python deploy/hf/push_space.py` (requires `hf auth login`; update `REPO_ID` first).
+Deploy on **Render** (free): New → Blueprint → this repository; [`render.yaml`](render.yaml) builds the same Dockerfile and checks `/health`.
+Deploy to a **Hugging Face Space**: `python deploy/hf/push_space.py` (requires `hf auth login` and, for Docker Spaces on free CPU, a PRO plan;
+targets `<your HF user>/f1-pit-predictor`, or pass `--space owner/name`).
 
 ---
 
@@ -211,7 +215,7 @@ probs = model.predict_proba(features_df)[:, 1]
 
 **Input shape.** A DataFrame with the 15 raw columns from [`src/config.py:RAW_COLUMNS`](src/config.py) excluding `PitNextLap`. Feature engineering (lags, rolling means, tyre-life buckets, race-phase flags) is applied inside `prepare_features()`. Send a full driver-stint history per request so lag/rolling features populate correctly.
 
-**Refresh cadence.** When the training pipeline retrains, `models/champion/` is updated in-place. A `git pull` and process restart on the HF Space picks it up — no schema changes, no client work.
+**Refresh cadence.** When the training pipeline retrains, `models/champion/` is updated in-place. Render redeploys on every push to `main` (`autoDeploy`), so the new champion and its threshold go live without client changes.
 
 ---
 
