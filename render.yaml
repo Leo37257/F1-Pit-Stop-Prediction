@@ -1,0 +1,14 @@
+# Render Blueprint: the same container as the Hugging Face Space, on Render's free web-service plan.
+# Render -> New -> Blueprint -> pick this repository. Free instances sleep after ~15 min idle (first request is slow).
+services:
+  - type: web
+    name: f1-pit-predictor
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/hf/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: MLFLOW_TRACKING_URI
+        value: file:///tmp/mlruns
