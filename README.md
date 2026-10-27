@@ -4,6 +4,12 @@
 
 > Binary classifier predicting whether an F1 driver will pit on the **next** lap, trained on the Kaggle *Predicting F1 Pit Stops* dataset. Full MLOps loop: raw CSV → feature engineering → AutoML training → live inference UI → drift monitoring.
 
+> **Team lead.** I designed the end-to-end architecture (data and features → AutoML training pipeline → FastAPI serving
+> → drift monitoring) and the hand-offs between the four parts, and I built the monitoring part myself: Evidently drift
+> scenarios, then, after the course, model-free drift checks with alert thresholds, a natural-drift analysis of the 2025
+> season, per-compound and per-race performance slices, and an exit code so CI or Airflow can stop on an alert.
+> See [Model Monitoring](#-model-monitoring). — Leo Liu
+
 <p align="center">
   <a href="https://t0myyy-f1-pit-predictor.hf.space/"><img alt="Try it live" src="https://img.shields.io/badge/Try%20it%20live-▶-1f7a3d?style=flat-square&labelColor=2a323d"></a>
   <a href="https://huggingface.co/spaces/T0MYYY/f1-pit-predictor"><img alt="HF Space" src="https://img.shields.io/badge/🤗%20Space-running-FFD21E?style=flat-square&labelColor=2a323d"></a>
@@ -117,7 +123,9 @@ F1-Pit-Stop-Prediction/
 ├── tests/                         · Import + config-path smoke tests
 ├── models/champion/               · Deployed champion (XGBoost pyfunc + CHAMPION.json)
 ├── monitoring/
-│   └── model_monitoring.py        · Evidently AI drift monitoring (4 scenarios)
+│   ├── model_monitoring.py        · Evidently AI drift monitoring (4 scenarios) + alert verdicts
+│   ├── drift_checks.py            · PSI / KS checks and alert thresholds (no model needed)
+│   └── natural_drift.py           · real 2025 drift, year-over-year baseline, slice performance
 ├── monitoring_reports/            · Generated HTML reports + metrics_summary.json
 ├── docker-compose.yaml            · Airflow LocalExecutor + Postgres
 ├── dvc.yaml / dvc.lock            · DVC pipeline (ingest, preprocess stages)
@@ -133,7 +141,7 @@ F1-Pit-Stop-Prediction/
 | **Yuang Zou** | EDA, feature engineering, baseline modelling |
 | **Zihao Huang** | Training pipeline — Airflow DAG, MLflow experiment tracking, DVC |
 | **Tom Chen** | FastAPI serving, React dashboard, Hugging Face Space deployment |
-| **Leo Liu** | Model monitoring — Evidently AI drift scenarios |
+| **Leo Liu** | Team lead · architecture design · model monitoring — Evidently drift scenarios, alert checks, natural-drift and slice analysis |
 
 ---
 
@@ -229,10 +237,35 @@ Drift monitoring is implemented in [`monitoring/model_monitoring.py`](monitoring
 **Key finding:** `TyreLife` is the most sensitive feature. A +20 lap shift drops F1 by 0.119 and more than doubles the predicted pit rate (25% → 55%). Any upstream data error in TyreLife should trigger an immediate alert. `Compound` has a moderate effect (−0.034 F1); `Cumulative_Degradation` is robust (−0.003), compensated by correlated features.
 
 ```bash
-pip install evidently==0.4.33
-python monitoring/model_monitoring.py
-# Reports saved to monitoring_reports/ — open any HTML in a browser
+pip install -r requirements.txt
+python monitoring/model_monitoring.py                  # 4 Evidently reports + metrics_summary.json
+python monitoring/model_monitoring.py --fail-on alert  # exit 1 on an alert, for CI or an Airflow task
+python monitoring/natural_drift.py                     # real 2025 drift + slice performance (no injected change)
 ```
+
+**Each scenario now gets two verdicts** (`metrics_summary.json` → `alerts`), because they disagree:
+
+| Scenario | Changed feature | PSI | macro-F1 drop | Verdict |
+|---|---|---:|---:|---|
+| S2 TyreLife +20 | TyreLife | 6.11 | 0.119 | drift alert, performance alert |
+| S3 Compound → SOFT | Compound | 9.71 | 0.034 | drift alert, performance warn |
+| S4 Degradation ×2 | Cumulative_Degradation | 1.56 | 0.003 | drift alert, **no** performance cost |
+
+Thresholds live in [`monitoring/drift_checks.py`](monitoring/drift_checks.py): PSI 0.10 warn / 0.25 alert, macro-F1 drop
+0.03 warn / 0.07 alert. The checks need only NumPy, pandas and SciPy, so tests and CI can run them without Evidently or the model.
+
+### Natural drift: the real 2025 season
+
+`monitoring/natural_drift.py` compares 2025 with the training seasons without changing anything
+(outputs: `natural_drift.json`, `drift_by_feature.csv`, `slice_performance.csv`).
+
+* **Features moved, the model held.** 11 of 31 features cross PSI 0.25 against 2022–2024 (Cumulative_Degradation 0.83,
+  LapTime_Delta 0.64), while macro-F1 stays at 0.785.
+* **The pooled reference exaggerates drift.** Against 2024 alone only 5 features alert: the 2022–2024 reference includes the
+  synthetic 2023 season (pit rate 1.0% vs 27–30%). Season to season, 2024 → 2025 is the calmest change (median PSI 0.08,
+  against 0.19 for both transitions touching 2023). Monitoring should use the latest clean season as its baseline.
+* **Where accuracy is lost.** SOFT-tyre laps score macro-F1 0.70 against 0.77 on MEDIUM; six races fall below the alert line,
+  worst Miami (0.63), Australia (0.67) and Mexico City (0.68). These slices, not the global score, are what to watch.
 
 ### Note on the 2023 anomaly
 
