@@ -9,6 +9,7 @@
 > scenarios, then, after the course, model-free drift checks with alert thresholds, a natural-drift analysis of the 2025
 > season, per-compound and per-race performance slices, monitoring tasks in the Airflow DAG, and a decision threshold
 > chosen out-of-fold that lifts the served model's macro-F1 from 0.785 to 0.801.
+> See also the [model card](MODEL_CARD.md).
 > See [Model Monitoring](#-model-monitoring). — Leo Liu
 
 <p align="center">
@@ -249,6 +250,14 @@ ROC-AUC is unchanged (0.894) because the ranking is the same model; only the cut
 (Brier 0.117 on 2025; mean predicted probability 0.258 against an observed 0.284, so slightly under-confident).
 The threshold is stored in `models/champion/CHAMPION.json` and used by the API, the CLI and the monitoring scripts,
 so what is monitored is what is served.
+
+### Slice-targeted features: a negative result
+
+Monitoring flagged SOFT tyres and a few races, so [`evaluation/feature_experiments.py`](evaluation/feature_experiments.py)
+tried adding the race as a category and the driver's race history (pits so far, compounds used, laps into the stint),
+with the same out-of-fold protocol. Race identity lowered out-of-fold macro-F1 from 0.786 to 0.771 (the model memorises
+track noise); the history features were neutral (0.786 → 0.786 out-of-fold, 0.801 → 0.801 on 2025). The champion was
+kept. Details and the remaining weak slices are in the [model card](MODEL_CARD.md).
 
 ## 📊 Model Monitoring
 
