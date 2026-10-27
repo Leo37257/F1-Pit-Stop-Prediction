@@ -14,6 +14,7 @@ from src import config
 from src.inference import (
     RAW_INPUT_COLUMNS,
     load_sklearn_model,
+    decision_threshold,
     predict_records,
     prepare_features,
 )
@@ -111,7 +112,7 @@ def predict_dashboard(request: DashboardPredictRequest) -> DashboardPredictRespo
         model = _get_sklearn_model()
         features = prepare_features(raw)
         probs = model.predict_proba(features)[:, 1]
-        preds = (probs >= 0.5).astype(int)
+        preds = (probs >= decision_threshold()).astype(int)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DashboardPredictResponse(predictions=[
@@ -134,7 +135,7 @@ async def predict_csv(file: UploadFile = File(...)) -> dict[str, Any]:
         model = _get_sklearn_model()
         features = prepare_features(raw)
         probs = model.predict_proba(features)[:, 1]
-        preds = (probs >= 0.5).astype(int)
+        preds = (probs >= decision_threshold()).astype(int)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

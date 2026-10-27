@@ -28,6 +28,26 @@ class InferenceMetrics:
     roc_auc: float
 
 
+DEFAULT_THRESHOLD = 0.5
+
+
+def decision_threshold(model_dir: str | Path = config.CHAMPION_EXPORT_DIR) -> float:
+    """Probability cut-off for a pit call. Read from CHAMPION.json so it travels with the model; 0.5 if absent."""
+    meta = Path(model_dir) / "CHAMPION.json"
+    try:
+        return float(json.loads(meta.read_text()).get("decision_threshold", DEFAULT_THRESHOLD))
+    except (OSError, ValueError):
+        return DEFAULT_THRESHOLD
+
+
+def apply_threshold(model: Any, features: pd.DataFrame, threshold: float | None = None):
+    """Class labels from predict_proba at the champion's threshold (falls back to predict for label-only models)."""
+    if not hasattr(model, "predict_proba"):
+        return model.predict(features)
+    t = decision_threshold() if threshold is None else threshold
+    return (model.predict_proba(features)[:, 1] >= t).astype(int)
+
+
 def load_pyfunc_model(model_uri: str | Path = config.CHAMPION_EXPORT_DIR) -> Any:
     return mlflow.pyfunc.load_model(str(model_uri))
 
@@ -49,9 +69,9 @@ def prepare_features(raw_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def predict_dataframe(raw_df: pd.DataFrame, model: Any | None = None) -> list[int]:
-    fitted = model if model is not None else load_pyfunc_model()
+    fitted = model if model is not None else load_sklearn_model()
     features = prepare_features(raw_df)
-    return [int(x) for x in fitted.predict(features)]
+    return [int(x) for x in apply_threshold(fitted, features)]
 
 
 def predict_records(records: list[dict[str, Any]], model: Any | None = None) -> list[int]:
@@ -77,7 +97,7 @@ def score_raw_dataframe(
     fitted = model if model is not None else load_sklearn_model()
     features = prepare_features(scored)
     y_true = scored[config.TARGET_COL].astype(int)
-    y_pred = fitted.predict(features)
+    y_pred = apply_threshold(fitted, features)
     if not hasattr(fitted, "predict_proba"):
         raise ValueError("Model must expose predict_proba to calculate ROC-AUC")
     y_score = fitted.predict_proba(features)[:, 1]

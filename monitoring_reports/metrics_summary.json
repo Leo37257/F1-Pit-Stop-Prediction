@@ -11,36 +11,37 @@
   },
   "champion_baseline": {
     "algorithm": "xgboost",
-    "test_macro_f1": 0.7852,
+    "decision_threshold": 0.36,
+    "test_macro_f1": 0.8009,
     "test_roc_auc": 0.8945
   },
   "S1_original": {
     "rows": 92894,
-    "f1_macro": 0.7852,
+    "f1_macro": 0.8009,
     "roc_auc": 0.8945,
     "pit_rate_actual": 0.2844,
-    "pit_rate_predicted": 0.2526
+    "pit_rate_predicted": 0.3211
   },
   "S2_tyrelife_plus20": {
     "rows": 92894,
-    "f1_macro": 0.6662,
+    "f1_macro": 0.5939,
     "roc_auc": 0.8292,
     "pit_rate_actual": 0.2844,
-    "pit_rate_predicted": 0.5474
+    "pit_rate_predicted": 0.6495
   },
   "S3_compound": {
     "rows": 92894,
-    "f1_macro": 0.7509,
+    "f1_macro": 0.7597,
     "roc_auc": 0.8562,
     "pit_rate_actual": 0.2844,
-    "pit_rate_predicted": 0.255
+    "pit_rate_predicted": 0.3553
   },
   "S4_degradation": {
     "rows": 92894,
-    "f1_macro": 0.7823,
+    "f1_macro": 0.7976,
     "roc_auc": 0.8912,
     "pit_rate_actual": 0.2844,
-    "pit_rate_predicted": 0.256
+    "pit_rate_predicted": 0.3235
   },
   "thresholds": {
     "psi_warn": 0.1,
@@ -53,7 +54,7 @@
       "feature": "TyreLife",
       "psi": 6.1073,
       "drift_status": "alert",
-      "f1_drop": 0.119,
+      "f1_drop": 0.207,
       "performance_status": "alert",
       "status": "alert"
     },
@@ -61,7 +62,7 @@
       "feature": "Compound",
       "psi": 9.7068,
       "drift_status": "alert",
-      "f1_drop": 0.0343,
+      "f1_drop": 0.0412,
       "performance_status": "warn",
       "status": "alert"
     },
@@ -69,7 +70,7 @@
       "feature": "Cumulative_Degradation",
       "psi": 1.5572,
       "drift_status": "alert",
-      "f1_drop": 0.0029,
+      "f1_drop": 0.0033,
       "performance_status": "ok",
       "status": "alert"
     }

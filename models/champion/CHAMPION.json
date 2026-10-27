@@ -6,7 +6,8 @@
   "metrics": {
     "test_macro_f1": 0.7851640989320597,
     "test_roc_auc": 0.894482810606675,
-    "val_loss": 0.17461166207978618
+    "val_loss": 0.17461166207978618,
+    "test_macro_f1_at_decision_threshold": 0.8009
   },
   "baseline_to_beat": {
     "macro_f1": 0.6122,
@@ -29,5 +30,7 @@
     "colsample_bytree": "0.9733825394476897",
     "reg_alpha": "0.0009765625",
     "reg_lambda": "0.011719319383379728"
-  }
+  },
+  "decision_threshold": 0.36,
+  "decision_threshold_source": "evaluation/threshold_tuning.py: chosen on out-of-fold predictions (5-fold GroupKFold by Year and Race, seasons 2022 and 2024), not on the 2025 test season"
 }

@@ -81,72 +81,78 @@
   },
   "overall_2025": {
     "rows": 92894,
-    "f1_macro": 0.7852,
+    "f1_macro": 0.8009,
     "roc_auc": 0.8945,
     "pit_rate_actual": 0.2844,
-    "pit_rate_predicted": 0.2526
+    "pit_rate_predicted": 0.3211
   },
   "worst_slices": [
     {
       "slice": "Race",
       "value": "Miami Grand Prix",
       "rows": 1287,
-      "f1_macro": 0.6335,
+      "f1_macro": 0.6057,
       "roc_auc": 0.7699,
       "pit_rate_actual": 0.1267,
-      "pit_rate_predicted": 0.1546,
-      "f1_drop": 0.1517,
+      "pit_rate_predicted": 0.2937,
+      "f1_drop": 0.1952,
       "status": "alert"
     },
     {
       "slice": "Race",
       "value": "Australian Grand Prix",
       "rows": 2533,
-      "f1_macro": 0.6668,
+      "f1_macro": 0.6526,
       "roc_auc": 0.8545,
       "pit_rate_actual": 0.0426,
-      "pit_rate_predicted": 0.0565,
-      "f1_drop": 0.1184,
-      "status": "alert"
-    },
-    {
-      "slice": "Race",
-      "value": "Mexico City Grand Prix",
-      "rows": 4244,
-      "f1_macro": 0.676,
-      "roc_auc": 0.8268,
-      "pit_rate_actual": 0.1638,
-      "pit_rate_predicted": 0.1126,
-      "f1_drop": 0.1092,
+      "pit_rate_predicted": 0.092,
+      "f1_drop": 0.1483,
       "status": "alert"
     },
     {
       "slice": "Race",
       "value": "Austrian Grand Prix",
       "rows": 4323,
-      "f1_macro": 0.6887,
+      "f1_macro": 0.6938,
       "roc_auc": 0.8241,
       "pit_rate_actual": 0.1874,
-      "pit_rate_predicted": 0.2288,
-      "f1_drop": 0.0965,
+      "pit_rate_predicted": 0.2935,
+      "f1_drop": 0.1071,
       "status": "alert"
     },
     {
       "slice": "Race",
-      "value": "Spanish Grand Prix",
-      "rows": 3947,
-      "f1_macro": 0.6954,
-      "roc_auc": 0.7935,
-      "pit_rate_actual": 0.4175,
-      "pit_rate_predicted": 0.3529,
-      "f1_drop": 0.0898,
+      "value": "Mexico City Grand Prix",
+      "rows": 4244,
+      "f1_macro": 0.7038,
+      "roc_auc": 0.8268,
+      "pit_rate_actual": 0.1638,
+      "pit_rate_predicted": 0.1918,
+      "f1_drop": 0.0971,
+      "status": "alert"
+    },
+    {
+      "slice": "Race",
+      "value": "S\u00e3o Paulo Grand Prix",
+      "rows": 3539,
+      "f1_macro": 0.7115,
+      "roc_auc": 0.7897,
+      "pit_rate_actual": 0.3772,
+      "pit_rate_predicted": 0.3993,
+      "f1_drop": 0.0894,
       "status": "alert"
     }
   ],
   "slices_by_status": {
-    "ok": 15,
+    "ok": 16,
     "alert": 7,
-    "warn": 7
+    "warn": 6
   },
-  "status": "alert"
+  "performance_vs_champion": {
+    "champion_test_macro_f1": 0.8009,
+    "f1_drop": 0.0,
+    "status": "ok"
+  },
+  "status": "alert",
+  "gate_status": "ok"
 }

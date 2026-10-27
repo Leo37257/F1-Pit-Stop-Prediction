@@ -1,0 +1,33 @@
+{
+  "method": "5-fold GroupKFold by (Year, Race) on 2022-2024 with the champion's configuration; threshold chosen on out-of-fold predictions for 2022 and 2024; evaluated once on 2025",
+  "chosen_threshold": 0.36,
+  "oof_macro_f1": {
+    "at_0.5": 0.7751,
+    "at_chosen": 0.7856
+  },
+  "test_2025": {
+    "default_0.5": {
+      "threshold": 0.5,
+      "macro_f1": 0.7852,
+      "pit_rate_predicted": 0.2526
+    },
+    "tuned": {
+      "threshold": 0.36,
+      "macro_f1": 0.8009,
+      "pit_rate_predicted": 0.3211
+    }
+  },
+  "test_2025_macro_f1_gain": 0.0157,
+  "test_2025_pit_rate_actual": 0.2844,
+  "calibration_2025": {
+    "brier": 0.1172,
+    "roc_auc": 0.8945,
+    "mean_predicted": 0.2584,
+    "observed_rate": 0.2844
+  },
+  "calibration_oof_2022_2024_clean": {
+    "brier": 0.1233,
+    "mean_predicted": 0.2716,
+    "observed_rate": 0.2839
+  }
+}

@@ -4,7 +4,10 @@ The four scenarios in model_monitoring.py inject drift on purpose. This script a
 on the real 2025 season, which features moved, is that more than the normal year-to-year movement, and in which
 slices (tyre compound, race) does the champion lose accuracy?
 
-    python monitoring/natural_drift.py
+    python monitoring/natural_drift.py                  # report only, always exits 0
+    python monitoring/natural_drift.py --fail-on alert  # exit 1 if macro-F1 on current data drops past the alert line
+Feature drift and weak slices are reported as warnings but never fail the run: features drift every season
+(see year_over_year) and the model has held up; what should stop a pipeline is lost accuracy.
 Outputs (monitoring_reports/): natural_drift.json, drift_by_feature.csv, slice_performance.csv
 """
 from __future__ import annotations
@@ -22,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 
 from src import config  # noqa: E402
 from monitoring import drift_checks as dc  # noqa: E402
+from src.inference import apply_threshold  # noqa: E402
 
 OUT_DIR = ROOT / "monitoring_reports"
 NOT_FEATURES = {"id", "Year", config.TARGET_COL}
@@ -67,7 +71,7 @@ def slice_performance(test: pd.DataFrame, y_pred, y_score, overall_f1: float) ->
     return pd.DataFrame(rows)[cols].sort_values(["slice", "f1_macro"]).reset_index(drop=True)
 
 
-def main() -> None:
+def main() -> str:
     import mlflow.sklearn
 
     train = pd.read_parquet(config.PROCESSED_TRAIN)
@@ -81,9 +85,13 @@ def main() -> None:
 
     model = mlflow.sklearn.load_model(str(config.CHAMPION_EXPORT_DIR))
     X = test.drop(columns=[config.TARGET_COL])
-    y_pred, y_score = model.predict(X).astype(int), model.predict_proba(X)[:, 1]
+    y_pred, y_score = apply_threshold(model, X).astype(int), model.predict_proba(X)[:, 1]   # served cut-off
     overall = scores(test[config.TARGET_COL].to_numpy(), y_pred, y_score)
     slices = slice_performance(test, y_pred, y_score, overall["f1_macro"])
+
+    meta = json.loads((config.CHAMPION_EXPORT_DIR / "CHAMPION.json").read_text())["metrics"]
+    champion_f1 = meta.get("test_macro_f1_at_decision_threshold", meta["test_macro_f1"])
+    perf_vs_champion = dc.performance_status(round(champion_f1, 4), overall["f1_macro"])
 
     label_rate = {int(y): round(float(r), 4) for y, r in
                   pd.concat([train, test]).groupby("Year")[config.TARGET_COL].mean().items()}
@@ -100,7 +108,9 @@ def main() -> None:
         "overall_2025": overall,
         "worst_slices": slices.sort_values("f1_macro").head(5).round(4).to_dict("records"),
         "slices_by_status": slices.status.value_counts().to_dict(),
+        "performance_vs_champion": {"champion_test_macro_f1": round(champion_f1, 4), **perf_vs_champion},
         "status": dc.worst_status(list(drift.status) + list(slices.status)),
+        "gate_status": perf_vs_champion["status"],
     }
     OUT_DIR.mkdir(exist_ok=True)
     drift.round(4).to_csv(OUT_DIR / "drift_by_feature.csv", index=False)
@@ -115,7 +125,17 @@ def main() -> None:
     print("2025 overall:", overall)
     print("worst slices:", [(r['slice'], r['value'], r['rows'], r['f1_macro'], r['status']) for r in summary["worst_slices"]])
     print("slices by status:", summary["slices_by_status"], "| overall status:", summary["status"])
+    print("gate (macro-F1 vs champion):", summary["performance_vs_champion"])
+    return summary["gate_status"]
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Natural drift and slice performance on the current season")
+    parser.add_argument("--fail-on", choices=["never", "warn", "alert"], default="never",
+                        help="exit 1 when macro-F1 versus the champion reaches this level")
+    fail_on = parser.parse_args().fail_on
+    gate = main()
+    rank, level = {"ok": 1, "warn": 2, "alert": 3}, {"never": 99, "warn": 2, "alert": 3}
+    sys.exit(1 if rank.get(gate, 0) >= level[fail_on] else 0)
