@@ -11,6 +11,11 @@ commands used during development.
 Schedule is None (manual trigger). DVC versioning and git tagging happen
 outside the DAG.
 
+After register, two monitoring tasks run in parallel on the new champion:
+  monitor_drift  natural drift + slice performance on the test season; FAILS the run if macro-F1 drops
+                 past the alert line versus the champion (feature drift alone only warns)
+  stress_test    the four injected-drift scenarios with Evidently reports; informational, never fails
+
 Triggering with `{"time_budget": 80}` in the run config gives a ~2 min smoke
 run; the default 600s gives the production training (~10 min).
 """
@@ -67,4 +72,14 @@ with DAG(
         bash_command="cd /opt/airflow && python -m src.register",
     )
 
-    ingest >> preprocess >> train >> register
+    monitor_drift = BashOperator(
+        task_id="monitor_drift",
+        bash_command="cd /opt/airflow && python monitoring/natural_drift.py --fail-on alert",
+    )
+
+    stress_test = BashOperator(
+        task_id="stress_test",
+        bash_command="cd /opt/airflow && python monitoring/model_monitoring.py",
+    )
+
+    ingest >> preprocess >> train >> register >> [monitor_drift, stress_test]

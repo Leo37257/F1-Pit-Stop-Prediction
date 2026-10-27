@@ -13,6 +13,8 @@ x-airflow-common: &airflow-common
     - ./data:/opt/airflow/data
     - ./mlflow:/opt/airflow/mlflow
     - ./models:/opt/airflow/models
+    - ./monitoring:/opt/airflow/monitoring
+    - ./monitoring_reports:/opt/airflow/monitoring_reports
     - ./logs:/opt/airflow/logs
     - ./.git:/opt/airflow/.git:ro
   user: "${AIRFLOW_UID:-50000}:0"
