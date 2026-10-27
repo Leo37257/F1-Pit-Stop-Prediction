@@ -1,0 +1,152 @@
+{
+  "reference": "processed train, seasons 2022-2024",
+  "current": "processed test, season 2025",
+  "thresholds": {
+    "psi_warn": 0.1,
+    "psi_alert": 0.25,
+    "f1_drop_warn": 0.03,
+    "f1_drop_alert": 0.07
+  },
+  "features_checked": 31,
+  "features_by_status": {
+    "ok": 14,
+    "alert": 11,
+    "warn": 6
+  },
+  "top_drifted": [
+    {
+      "feature": "Cumulative_Degradation",
+      "psi": 0.8294,
+      "ks": 0.3024,
+      "status": "alert"
+    },
+    {
+      "feature": "LapTime_Delta",
+      "psi": 0.6352,
+      "ks": 0.2147,
+      "status": "alert"
+    },
+    {
+      "feature": "LapTime_Delta_lag1",
+      "psi": 0.6105,
+      "ks": 0.2071,
+      "status": "alert"
+    },
+    {
+      "feature": "LapTime_Delta_lag2",
+      "psi": 0.5948,
+      "ks": 0.1921,
+      "status": "alert"
+    },
+    {
+      "feature": "LapTimeDelta_roll3_mean",
+      "psi": 0.5929,
+      "ks": 0.1897,
+      "status": "alert"
+    }
+  ],
+  "features_by_status_vs_2024_only": {
+    "ok": 16,
+    "warn": 10,
+    "alert": 5
+  },
+  "year_over_year": [
+    {
+      "from": 2022,
+      "to": 2023,
+      "median_psi": 0.1935,
+      "features_alert": 12,
+      "features_warn": 9
+    },
+    {
+      "from": 2023,
+      "to": 2024,
+      "median_psi": 0.1916,
+      "features_alert": 12,
+      "features_warn": 8
+    },
+    {
+      "from": 2024,
+      "to": 2025,
+      "median_psi": 0.0767,
+      "features_alert": 5,
+      "features_warn": 10
+    }
+  ],
+  "pit_rate_by_year": {
+    "2022": 0.2665,
+    "2023": 0.0096,
+    "2024": 0.2953,
+    "2025": 0.2844
+  },
+  "overall_2025": {
+    "rows": 92894,
+    "f1_macro": 0.7852,
+    "roc_auc": 0.8945,
+    "pit_rate_actual": 0.2844,
+    "pit_rate_predicted": 0.2526
+  },
+  "worst_slices": [
+    {
+      "slice": "Race",
+      "value": "Miami Grand Prix",
+      "rows": 1287,
+      "f1_macro": 0.6335,
+      "roc_auc": 0.7699,
+      "pit_rate_actual": 0.1267,
+      "pit_rate_predicted": 0.1546,
+      "f1_drop": 0.1517,
+      "status": "alert"
+    },
+    {
+      "slice": "Race",
+      "value": "Australian Grand Prix",
+      "rows": 2533,
+      "f1_macro": 0.6668,
+      "roc_auc": 0.8545,
+      "pit_rate_actual": 0.0426,
+      "pit_rate_predicted": 0.0565,
+      "f1_drop": 0.1184,
+      "status": "alert"
+    },
+    {
+      "slice": "Race",
+      "value": "Mexico City Grand Prix",
+      "rows": 4244,
+      "f1_macro": 0.676,
+      "roc_auc": 0.8268,
+      "pit_rate_actual": 0.1638,
+      "pit_rate_predicted": 0.1126,
+      "f1_drop": 0.1092,
+      "status": "alert"
+    },
+    {
+      "slice": "Race",
+      "value": "Austrian Grand Prix",
+      "rows": 4323,
+      "f1_macro": 0.6887,
+      "roc_auc": 0.8241,
+      "pit_rate_actual": 0.1874,
+      "pit_rate_predicted": 0.2288,
+      "f1_drop": 0.0965,
+      "status": "alert"
+    },
+    {
+      "slice": "Race",
+      "value": "Spanish Grand Prix",
+      "rows": 3947,
+      "f1_macro": 0.6954,
+      "roc_auc": 0.7935,
+      "pit_rate_actual": 0.4175,
+      "pit_rate_predicted": 0.3529,
+      "f1_drop": 0.0898,
+      "status": "alert"
+    }
+  ],
+  "slices_by_status": {
+    "ok": 15,
+    "alert": 7,
+    "warn": 7
+  },
+  "status": "alert"
+}

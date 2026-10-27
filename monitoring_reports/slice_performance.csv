@@ -1,0 +1,30 @@
+slice,value,rows,f1_macro,roc_auc,pit_rate_actual,pit_rate_predicted,f1_drop,status
+Compound,SOFT,7709,0.7026,0.8168,0.3078,0.2373,0.0826,alert
+Compound,HARD,34034,0.7454,0.8267,0.4801,0.4684,0.0398,warn
+Compound,MEDIUM,47783,0.7746,0.905,0.154,0.1118,0.0106,ok
+Compound,INTERMEDIATE,3366,0.797,0.9227,0.1028,0.1046,-0.0118,ok
+Race,Miami Grand Prix,1287,0.6335,0.7699,0.1267,0.1546,0.1517,alert
+Race,Australian Grand Prix,2533,0.6668,0.8545,0.0426,0.0565,0.1184,alert
+Race,Mexico City Grand Prix,4244,0.676,0.8268,0.1638,0.1126,0.1092,alert
+Race,Austrian Grand Prix,4323,0.6887,0.8241,0.1874,0.2288,0.0965,alert
+Race,Spanish Grand Prix,3947,0.6954,0.7935,0.4175,0.3529,0.0898,alert
+Race,São Paulo Grand Prix,3539,0.706,0.7897,0.3772,0.3199,0.0792,alert
+Race,Bahrain Grand Prix,3396,0.732,0.8178,0.4767,0.4555,0.0532,warn
+Race,Hungarian Grand Prix,5076,0.732,0.8999,0.3095,0.1787,0.0532,warn
+Race,Canadian Grand Prix,5105,0.7416,0.8432,0.3126,0.2358,0.0436,warn
+Race,United States Grand Prix,3538,0.7456,0.8853,0.1569,0.1447,0.0396,warn
+Race,Pre-Season Testing,4219,0.7469,0.8945,0.1387,0.1609,0.0383,warn
+Race,Japanese Grand Prix,4982,0.7486,0.8738,0.1911,0.1947,0.0366,warn
+Race,British Grand Prix,1300,0.7568,0.8818,0.3192,0.2631,0.0284,ok
+Race,Emilia Romagna Grand Prix,4636,0.7651,0.8883,0.3382,0.2621,0.0201,ok
+Race,Azerbaijan Grand Prix,1866,0.7817,0.8552,0.366,0.3355,0.0035,ok
+Race,Qatar Grand Prix,3863,0.7886,0.8889,0.3743,0.3484,-0.0034,ok
+Race,Las Vegas Grand Prix,2580,0.8054,0.8944,0.2764,0.3143,-0.0202,ok
+Race,Belgian Grand Prix,1552,0.8079,0.8964,0.5535,0.5316,-0.0227,ok
+Race,Italian Grand Prix,3611,0.817,0.9529,0.1767,0.1255,-0.0318,ok
+Race,Dutch Grand Prix,6416,0.8253,0.9382,0.2358,0.207,-0.0401,ok
+Race,Abu Dhabi Grand Prix,3882,0.8277,0.9283,0.3004,0.2836,-0.0425,ok
+Race,Monaco Grand Prix,4773,0.833,0.9153,0.3903,0.3614,-0.0478,ok
+Race,Saudi Arabian Grand Prix,3226,0.8384,0.932,0.3168,0.2932,-0.0532,ok
+Race,Chinese Grand Prix,4035,0.8526,0.9486,0.398,0.347,-0.0674,ok
+Race,Singapore Grand Prix,4957,0.8673,0.95,0.2594,0.2399,-0.0821,ok

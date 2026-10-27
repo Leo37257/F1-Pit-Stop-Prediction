@@ -1,0 +1,121 @@
+"""Natural drift: how 2025 differs from the 2022-2024 training years, without any injected change.
+
+The four scenarios in model_monitoring.py inject drift on purpose. This script asks the production question:
+on the real 2025 season, which features moved, is that more than the normal year-to-year movement, and in which
+slices (tyre compound, race) does the champion lose accuracy?
+
+    python monitoring/natural_drift.py
+Outputs (monitoring_reports/): natural_drift.json, drift_by_feature.csv, slice_performance.csv
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics import f1_score, roc_auc_score
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from src import config  # noqa: E402
+from monitoring import drift_checks as dc  # noqa: E402
+
+OUT_DIR = ROOT / "monitoring_reports"
+NOT_FEATURES = {"id", "Year", config.TARGET_COL}
+MIN_SLICE_ROWS = 500
+
+
+def feature_lists(df: pd.DataFrame) -> tuple[list[str], list[str]]:
+    categorical = [c for c in config.CATEGORICAL_COLUMNS if c in df.columns]
+    numeric = [c for c in df.columns if c not in NOT_FEATURES and c not in categorical
+               and pd.api.types.is_numeric_dtype(df[c])]
+    return numeric, categorical
+
+
+def year_over_year(df: pd.DataFrame, numeric: list[str], categorical: list[str]) -> list[dict]:
+    """PSI between consecutive seasons: the 'normal' amount of drift to compare 2025 against."""
+    years = sorted(df["Year"].unique())
+    out = []
+    for a, b in zip(years, years[1:]):
+        t = dc.feature_drift_table(df[df.Year == a], df[df.Year == b], numeric, categorical)
+        out.append({"from": int(a), "to": int(b), "median_psi": round(float(t.psi.median()), 4),
+                    "features_alert": int((t.status == "alert").sum()), "features_warn": int((t.status == "warn").sum())})
+    return out
+
+
+def scores(y_true, y_pred, y_score) -> dict:
+    auc = roc_auc_score(y_true, y_score) if len(set(y_true)) > 1 else float("nan")
+    return {"rows": int(len(y_true)), "f1_macro": round(float(f1_score(y_true, y_pred, average="macro")), 4),
+            "roc_auc": round(float(auc), 4), "pit_rate_actual": round(float(np.mean(y_true)), 4),
+            "pit_rate_predicted": round(float(np.mean(y_pred)), 4)}
+
+
+def slice_performance(test: pd.DataFrame, y_pred, y_score, overall_f1: float) -> pd.DataFrame:
+    rows = []
+    for col in ("Compound", "Race"):
+        for value, idx in test.groupby(col).groups.items():
+            if len(idx) < MIN_SLICE_ROWS:
+                continue
+            pos = test.index.get_indexer(idx)
+            s = scores(test[config.TARGET_COL].to_numpy()[pos], y_pred[pos], y_score[pos])
+            s.update({"slice": col, "value": value, **dc.performance_status(overall_f1, s["f1_macro"])})
+            rows.append(s)
+    cols = ["slice", "value", "rows", "f1_macro", "roc_auc", "pit_rate_actual", "pit_rate_predicted", "f1_drop", "status"]
+    return pd.DataFrame(rows)[cols].sort_values(["slice", "f1_macro"]).reset_index(drop=True)
+
+
+def main() -> None:
+    import mlflow.sklearn
+
+    train = pd.read_parquet(config.PROCESSED_TRAIN)
+    test = pd.read_parquet(config.PROCESSED_TEST).reset_index(drop=True)
+    numeric, categorical = feature_lists(train)
+
+    drift = dc.feature_drift_table(train, test, numeric, categorical)
+    # the pooled reference contains the synthetic 2023 season (pit rate ~1%), so also compare with 2024 alone
+    drift_vs_2024 = dc.feature_drift_table(train[train.Year == 2024], test, numeric, categorical)
+    yoy = year_over_year(pd.concat([train, test], ignore_index=True), numeric, categorical)
+
+    model = mlflow.sklearn.load_model(str(config.CHAMPION_EXPORT_DIR))
+    X = test.drop(columns=[config.TARGET_COL])
+    y_pred, y_score = model.predict(X).astype(int), model.predict_proba(X)[:, 1]
+    overall = scores(test[config.TARGET_COL].to_numpy(), y_pred, y_score)
+    slices = slice_performance(test, y_pred, y_score, overall["f1_macro"])
+
+    label_rate = {int(y): round(float(r), 4) for y, r in
+                  pd.concat([train, test]).groupby("Year")[config.TARGET_COL].mean().items()}
+    summary = {
+        "reference": "processed train, seasons 2022-2024", "current": "processed test, season 2025",
+        "thresholds": {"psi_warn": dc.PSI_WARN, "psi_alert": dc.PSI_ALERT,
+                       "f1_drop_warn": dc.F1_DROP_WARN, "f1_drop_alert": dc.F1_DROP_ALERT},
+        "features_checked": int(len(drift)),
+        "features_by_status": drift.status.value_counts().to_dict(),
+        "top_drifted": drift.head(5)[["feature", "psi", "ks", "status"]].round(4).to_dict("records"),
+        "features_by_status_vs_2024_only": drift_vs_2024.status.value_counts().to_dict(),
+        "year_over_year": yoy,
+        "pit_rate_by_year": label_rate,
+        "overall_2025": overall,
+        "worst_slices": slices.sort_values("f1_macro").head(5).round(4).to_dict("records"),
+        "slices_by_status": slices.status.value_counts().to_dict(),
+        "status": dc.worst_status(list(drift.status) + list(slices.status)),
+    }
+    OUT_DIR.mkdir(exist_ok=True)
+    drift.round(4).to_csv(OUT_DIR / "drift_by_feature.csv", index=False)
+    slices.round(4).to_csv(OUT_DIR / "slice_performance.csv", index=False)
+    (OUT_DIR / "natural_drift.json").write_text(json.dumps(summary, indent=2, default=str))
+
+    print(f"features vs 2024 only: {summary['features_by_status_vs_2024_only']}")
+    print(f"features: {summary['features_by_status']}  top: " +
+          ", ".join(f"{r['feature']} {r['psi']:.3f}" for r in summary["top_drifted"]))
+    print("year over year:", [(y['from'], y['to'], y['median_psi'], y['features_alert']) for y in yoy])
+    print("pit rate by year:", label_rate)
+    print("2025 overall:", overall)
+    print("worst slices:", [(r['slice'], r['value'], r['rows'], r['f1_macro'], r['status']) for r in summary["worst_slices"]])
+    print("slices by status:", summary["slices_by_status"], "| overall status:", summary["status"])
+
+
+if __name__ == "__main__":
+    main()
