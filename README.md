@@ -266,7 +266,7 @@ Drift monitoring is implemented in [`monitoring/model_monitoring.py`](monitoring
 pip install -r requirements.txt
 python monitoring/model_monitoring.py                  # 4 Evidently reports + metrics_summary.json
 python monitoring/model_monitoring.py --fail-on alert  # exit 1 on an alert, for CI or an Airflow task
-python monitoring/natural_drift.py                     # real 2025 drift + slice performance (no injected change)
+python monitoring/natural_drift.py                     # real 2025 drift vs 2024 + slice performance (no injected change)
 ```
 
 **In Airflow** the training DAG now ends with two monitoring tasks on the new champion: `monitor_drift` runs the
@@ -289,11 +289,13 @@ Thresholds live in [`monitoring/drift_checks.py`](monitoring/drift_checks.py): P
 `monitoring/natural_drift.py` compares 2025 with the training seasons without changing anything
 (outputs: `natural_drift.json`, `drift_by_feature.csv`, `slice_performance.csv`).
 
-* **Features moved, the model held.** 11 of 31 features cross PSI 0.25 against 2022–2024 (Cumulative_Degradation 0.83,
-  LapTime_Delta 0.64), while macro-F1 stays at 0.801.
-* **The pooled reference exaggerates drift.** Against 2024 alone only 5 features alert: the 2022–2024 reference includes the
-  synthetic 2023 season (pit rate 1.0% vs 27–30%). Season to season, 2024 → 2025 is the calmest change (median PSI 0.08,
-  against 0.19 for both transitions touching 2023). Monitoring should use the latest clean season as its baseline.
+* **A few features moved, the model held.** Against the 2024 season (the default baseline) 2 of 31 features cross
+  PSI 0.25, Cumulative_Degradation (0.91) and LapTime_Delta_lag3 (0.27), and 10 more are in the warning band, while
+  macro-F1 stays at 0.801.
+* **The pooled reference exaggerates drift.** Against 2022–2024 pooled, 8 features alert: that reference includes the
+  synthetic 2023 season (pit rate 1.0% vs 27–30%). Season to season, 2024 → 2025 is the calmest change (median PSI 0.02,
+  against 0.18–0.19 for the two transitions touching 2023). So the script now uses the latest clean season, 2024, as its
+  baseline by default (`--reference-years` to change it).
 * **Where accuracy is lost.** SOFT-tyre laps score macro-F1 0.72 against 0.80 on MEDIUM; six races fall below the alert line,
   worst Miami (0.61), Australia (0.65) and Austria (0.69). These slices, not the global score, are what to watch.
 

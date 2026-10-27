@@ -1,5 +1,5 @@
 {
-  "reference": "processed train, seasons 2022-2024",
+  "reference": "processed train, season(s) 2024",
   "current": "processed test, season 2025",
   "thresholds": {
     "psi_warn": 0.1,
@@ -9,67 +9,67 @@
   },
   "features_checked": 31,
   "features_by_status": {
-    "ok": 14,
-    "alert": 11,
-    "warn": 6
+    "ok": 19,
+    "warn": 10,
+    "alert": 2
   },
   "top_drifted": [
     {
       "feature": "Cumulative_Degradation",
-      "psi": 0.8294,
-      "ks": 0.3024,
+      "psi": 0.9118,
+      "ks": 0.3086,
       "status": "alert"
     },
     {
-      "feature": "LapTime_Delta",
-      "psi": 0.6352,
-      "ks": 0.2147,
-      "status": "alert"
-    },
-    {
-      "feature": "LapTime_Delta_lag1",
-      "psi": 0.6105,
-      "ks": 0.2071,
+      "feature": "LapTime_Delta_lag3",
+      "psi": 0.2746,
+      "ks": 0.1724,
       "status": "alert"
     },
     {
       "feature": "LapTime_Delta_lag2",
-      "psi": 0.5948,
-      "ks": 0.1921,
-      "status": "alert"
+      "psi": 0.2343,
+      "ks": 0.1533,
+      "status": "warn"
+    },
+    {
+      "feature": "LapTime_Delta_lag1",
+      "psi": 0.1797,
+      "ks": 0.1377,
+      "status": "warn"
     },
     {
       "feature": "LapTimeDelta_roll3_mean",
-      "psi": 0.5929,
-      "ks": 0.1897,
-      "status": "alert"
+      "psi": 0.1484,
+      "ks": 0.1224,
+      "status": "warn"
     }
   ],
-  "features_by_status_vs_2024_only": {
-    "ok": 16,
-    "warn": 10,
-    "alert": 5
+  "features_by_status_vs_pooled_2022_2024": {
+    "ok": 17,
+    "alert": 8,
+    "warn": 6
   },
   "year_over_year": [
     {
       "from": 2022,
       "to": 2023,
       "median_psi": 0.1935,
-      "features_alert": 12,
-      "features_warn": 9
+      "features_alert": 10,
+      "features_warn": 11
     },
     {
       "from": 2023,
       "to": 2024,
-      "median_psi": 0.1916,
-      "features_alert": 12,
+      "median_psi": 0.1834,
+      "features_alert": 11,
       "features_warn": 8
     },
     {
       "from": 2024,
       "to": 2025,
-      "median_psi": 0.0767,
-      "features_alert": 5,
+      "median_psi": 0.024,
+      "features_alert": 2,
       "features_warn": 10
     }
   ],

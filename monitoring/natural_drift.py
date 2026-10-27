@@ -4,7 +4,8 @@ The four scenarios in model_monitoring.py inject drift on purpose. This script a
 on the real 2025 season, which features moved, is that more than the normal year-to-year movement, and in which
 slices (tyre compound, race) does the champion lose accuracy?
 
-    python monitoring/natural_drift.py                  # report only, always exits 0
+    python monitoring/natural_drift.py                  # report only, always exits 0 (baseline: 2024 season)
+    python monitoring/natural_drift.py --reference-years 2022,2023,2024   # pooled baseline instead
     python monitoring/natural_drift.py --fail-on alert  # exit 1 if macro-F1 on current data drops past the alert line
 Feature drift and weak slices are reported as warnings but never fail the run: features drift every season
 (see year_over_year) and the model has held up; what should stop a pipeline is lost accuracy.
@@ -71,16 +72,20 @@ def slice_performance(test: pd.DataFrame, y_pred, y_score, overall_f1: float) ->
     return pd.DataFrame(rows)[cols].sort_values(["slice", "f1_macro"]).reset_index(drop=True)
 
 
-def main() -> str:
+DEFAULT_REFERENCE_YEARS = (2024,)   # latest clean season; the pooled 2022-2024 baseline includes the synthetic 2023
+
+
+def main(reference_years: tuple[int, ...] = DEFAULT_REFERENCE_YEARS) -> str:
     import mlflow.sklearn
 
     train = pd.read_parquet(config.PROCESSED_TRAIN)
     test = pd.read_parquet(config.PROCESSED_TEST).reset_index(drop=True)
     numeric, categorical = feature_lists(train)
 
-    drift = dc.feature_drift_table(train, test, numeric, categorical)
-    # the pooled reference contains the synthetic 2023 season (pit rate ~1%), so also compare with 2024 alone
-    drift_vs_2024 = dc.feature_drift_table(train[train.Year == 2024], test, numeric, categorical)
+    reference = train[train.Year.isin(reference_years)]
+    drift = dc.feature_drift_table(reference, test, numeric, categorical)
+    # keep the pooled comparison for context: it shows how much the synthetic 2023 season inflates the alerts
+    drift_pooled = dc.feature_drift_table(train, test, numeric, categorical)
     yoy = year_over_year(pd.concat([train, test], ignore_index=True), numeric, categorical)
 
     model = mlflow.sklearn.load_model(str(config.CHAMPION_EXPORT_DIR))
@@ -96,13 +101,14 @@ def main() -> str:
     label_rate = {int(y): round(float(r), 4) for y, r in
                   pd.concat([train, test]).groupby("Year")[config.TARGET_COL].mean().items()}
     summary = {
-        "reference": "processed train, seasons 2022-2024", "current": "processed test, season 2025",
+        "reference": f"processed train, season(s) {', '.join(map(str, reference_years))}",
+        "current": "processed test, season 2025",
         "thresholds": {"psi_warn": dc.PSI_WARN, "psi_alert": dc.PSI_ALERT,
                        "f1_drop_warn": dc.F1_DROP_WARN, "f1_drop_alert": dc.F1_DROP_ALERT},
         "features_checked": int(len(drift)),
         "features_by_status": drift.status.value_counts().to_dict(),
         "top_drifted": drift.head(5)[["feature", "psi", "ks", "status"]].round(4).to_dict("records"),
-        "features_by_status_vs_2024_only": drift_vs_2024.status.value_counts().to_dict(),
+        "features_by_status_vs_pooled_2022_2024": drift_pooled.status.value_counts().to_dict(),
         "year_over_year": yoy,
         "pit_rate_by_year": label_rate,
         "overall_2025": overall,
@@ -117,7 +123,7 @@ def main() -> str:
     slices.round(4).to_csv(OUT_DIR / "slice_performance.csv", index=False)
     (OUT_DIR / "natural_drift.json").write_text(json.dumps(summary, indent=2, default=str))
 
-    print(f"features vs 2024 only: {summary['features_by_status_vs_2024_only']}")
+    print(f"features vs pooled 2022-2024: {summary['features_by_status_vs_pooled_2022_2024']}")
     print(f"features: {summary['features_by_status']}  top: " +
           ", ".join(f"{r['feature']} {r['psi']:.3f}" for r in summary["top_drifted"]))
     print("year over year:", [(y['from'], y['to'], y['median_psi'], y['features_alert']) for y in yoy])
@@ -133,9 +139,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Natural drift and slice performance on the current season")
+    parser.add_argument("--reference-years", default=",".join(map(str, DEFAULT_REFERENCE_YEARS)),
+                        help="comma-separated training seasons to use as the drift baseline")
     parser.add_argument("--fail-on", choices=["never", "warn", "alert"], default="never",
                         help="exit 1 when macro-F1 versus the champion reaches this level")
-    fail_on = parser.parse_args().fail_on
-    gate = main()
+    args = parser.parse_args()
+    fail_on = args.fail_on
+    gate = main(tuple(int(y) for y in args.reference_years.split(",")))
     rank, level = {"ok": 1, "warn": 2, "alert": 3}, {"never": 99, "warn": 2, "alert": 3}
     sys.exit(1 if rank.get(gate, 0) >= level[fail_on] else 0)

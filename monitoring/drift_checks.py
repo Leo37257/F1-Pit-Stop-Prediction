@@ -38,10 +38,9 @@ def psi_numeric(reference: pd.Series, current: pd.Series, bins: int = 10) -> flo
     cur = pd.to_numeric(current, errors="coerce").dropna().to_numpy(float)
     if len(ref) == 0 or len(cur) == 0:
         return float("nan")
+    if np.unique(ref).size <= bins:          # binary or few-valued column (incl. constant): compare value shares
+        return psi_categorical(pd.Series(ref), pd.Series(cur))
     edges = np.unique(np.quantile(ref, np.linspace(0, 1, bins + 1)))
-    if len(edges) < 3:                       # (almost) constant reference: any change in the value is a major shift
-        same = float(np.isclose(cur, ref[0]).mean())
-        return 0.0 if same > 0.999 else PSI_ALERT
     edges[0], edges[-1] = -np.inf, np.inf
     return psi_from_counts(np.histogram(ref, edges)[0], np.histogram(cur, edges)[0])
 

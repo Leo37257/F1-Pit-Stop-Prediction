@@ -50,6 +50,14 @@ def test_constant_reference():
     assert dc.classify_psi(dc.psi_numeric(ref, pd.Series([0.0] * 900 + [1.0] * 100))) == "alert"
 
 
+def test_binary_column_is_compared_by_shares_not_flagged():
+    a = pd.Series(rng.binomial(1, 0.25, 20_000).astype(float))
+    b = pd.Series(rng.binomial(1, 0.25, 20_000).astype(float))
+    assert dc.classify_psi(dc.psi_numeric(a, b)) == "ok"          # used to come out as a false 0.25 alert
+    c = pd.Series(rng.binomial(1, 0.60, 20_000).astype(float))
+    assert dc.classify_psi(dc.psi_numeric(a, c)) == "alert"
+
+
 def test_empty_input_is_unknown():
     assert dc.classify_psi(dc.psi_numeric(pd.Series([], dtype=float), pd.Series([1.0]))) == "unknown"
 
