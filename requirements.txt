@@ -15,3 +15,9 @@ fastapi==0.136.1
 uvicorn==0.34.0
 graphviz==0.20.3
 psutil==6.0.0
+# API tests (FastAPI TestClient + file upload)
+python-multipart==0.0.20
+httpx==0.28.1
+# monitoring
+evidently==0.4.33
+scipy==1.17.1
