@@ -14,6 +14,7 @@
 <p align="center">
   <a href="https://f1-pit-predictor-6u64.onrender.com/"><img alt="Try it live" src="https://img.shields.io/badge/Try%20it%20live-▶-1f7a3d?style=flat-square&labelColor=2a323d"></a>
   <a href="https://f1-pit-predictor-6u64.onrender.com/health"><img alt="Render" src="https://img.shields.io/badge/Render-live-46E3B7?style=flat-square&logo=render&logoColor=black&labelColor=2a323d"></a>
+  <a href="https://github.com/Leo37257/F1-Pit-Stop-Prediction/actions/workflows/ci.yml"><img alt="tests" src="https://github.com/Leo37257/F1-Pit-Stop-Prediction/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="macro-F1" src="https://img.shields.io/badge/macro--F1-0.801-00aa55?style=flat-square&labelColor=2a323d">
   <img alt="ROC-AUC" src="https://img.shields.io/badge/ROC--AUC-0.894-00aa55?style=flat-square&labelColor=2a323d">
   <img alt="Status" src="https://img.shields.io/badge/Status-v2%20shipped-ec5800?style=flat-square&labelColor=2a323d">
