@@ -9,8 +9,7 @@
 > scenarios, then, after the course, model-free drift checks with alert thresholds, a natural-drift analysis of the 2025
 > season, per-compound and per-race performance slices, monitoring tasks in the Airflow DAG, and a decision threshold
 > chosen out-of-fold that lifts the served model's macro-F1 from 0.785 to 0.801.
-> See also the [model card](MODEL_CARD.md).
-> See [Model Monitoring](#-model-monitoring). — Leo Liu
+> See [Model Monitoring](#-model-monitoring) and the [model card](MODEL_CARD.md). — Leo Liu
 
 <p align="center">
   <a href="https://f1-pit-predictor-6u64.onrender.com/"><img alt="Try it live" src="https://img.shields.io/badge/Try%20it%20live-▶-1f7a3d?style=flat-square&labelColor=2a323d"></a>
@@ -70,8 +69,10 @@ flowchart TB
         prep --> trainparq[("processed/{train,test}.parquet")]
         trainparq --> trn[["src.train\nFLAML × {lgbm, xgb, xgb_ld, catboost}"]]
         trn --> mlflow[("MLflow runs\nsqlite + artifacts")]
-        mlflow --> reg[["src.register\npick best macro-F1 · export"]]
-        reg --> champ[["models/champion/\nmlflow pyfunc + CHAMPION.json"]]
+        mlflow --> reg[["src.register\nchampion/challenger gate · export"]]
+        reg --> champ[["models/champion/\nMLflow model + CHAMPION.json"]]
+        reg --> thr[["evaluation/threshold_tuning\nout-of-fold decision threshold"]]
+        thr -->|"threshold 0.36"| champ
     end
 
     subgraph SERVE ["Inference & Dashboard"]
@@ -83,11 +84,14 @@ flowchart TB
         api --> ui[["React SPA\n+ predict.html"]]
     end
 
-    subgraph MONITOR ["Drift Monitoring"]
+    subgraph MONITOR ["Monitoring (Airflow tasks monitor_drift, stress_test)"]
         direction LR
-        trainparq -.->|"reference 2022–2024"| mon[["Evidently AI\nmonitoring/model_monitoring.py"]]
-        champ -.->|"champion model"| mon
-        mon --> rep[/"monitoring_reports/\n4 × HTML + metrics_summary.json"/]
+        trainparq -.->|"2024 baseline"| nat[["monitoring/natural_drift.py\nPSI · KS · slices · F1 gate"]]
+        trainparq -.->|"2022–2024 reference"| mon[["monitoring/model_monitoring.py\nEvidently · 4 stress scenarios"]]
+        champ -.-> nat
+        champ -.-> mon
+        nat --> rep[/"monitoring_reports/\nnatural_drift.json · slice_performance.csv"/]
+        mon --> rep2[/"monitoring_reports/\n4 × HTML + metrics_summary.json"/]
     end
 
     classDef dataNode    fill:#1e3a5f,stroke:#4a90d9,color:#cce4ff
@@ -98,11 +102,11 @@ flowchart TB
     classDef monNode     fill:#2d1b4e,stroke:#9b59b6,color:#e8daef
 
     class raw dataNode
-    class ingest,prep,trn,reg processNode
+    class ingest,prep,trn,reg,thr processNode
     class parq,trainparq,mlflow storageNode
     class champ champNode
     class api,ep1,ep2,ep3,ui serveNode
-    class mon,rep monNode
+    class mon,nat,rep,rep2 monNode
 ```
 
 ---
@@ -123,17 +127,24 @@ F1-Pit-Stop-Prediction/
 │   ├── inference.py               · prepare_features() · load_*_model() · CLI
 │   └── api.py                     · FastAPI app — /predict, /predict/dashboard, /predict/csv
 ├── dashboard/                     · React + Babel SPA (CDN, no build) + predict.html
-├── deploy/hf/                     · HF Docker Space — Dockerfile, requirements, push_space.py
-├── dags/pit_stop_training_dag.py  · Airflow DAG — 4 BashOperators wrapping src.*
-├── tests/                         · Import + config-path smoke tests
-├── models/champion/               · Deployed champion (XGBoost pyfunc + CHAMPION.json)
+├── deploy/hf/                     · Serving image (Dockerfile used by Render and HF Spaces), requirements, push_space.py
+├── dags/pit_stop_training_dag.py  · Airflow DAG — 6 BashOperators: ingest → preprocess → train → register (gate) → tune_threshold → monitoring
+├── evaluation/
+│   ├── threshold_tuning.py        · Out-of-fold decision threshold + calibration (--write-champion after a retrain)
+│   └── feature_experiments.py     · Slice-targeted feature experiments (negative result)
+├── tests/                         · 36 tests: drift checks, thresholds, register gate, inference CLI, API
+├── models/champion/               · Deployed champion (XGBoost, MLflow sklearn flavour + CHAMPION.json)
 ├── monitoring/
 │   ├── model_monitoring.py        · Evidently AI drift monitoring (4 scenarios) + alert verdicts
 │   ├── drift_checks.py            · PSI / KS checks and alert thresholds (no model needed)
 │   └── natural_drift.py           · real 2025 drift, year-over-year baseline, slice performance
 ├── monitoring_reports/            · Generated HTML reports + metrics_summary.json
+├── Dockerfile                     · Airflow 2.9 image (apache/airflow + requirements.txt)
 ├── docker-compose.yaml            · Airflow LocalExecutor + Postgres
 ├── dvc.yaml / dvc.lock            · DVC pipeline (ingest, preprocess stages)
+├── render.yaml                    · Render Blueprint for the live demo
+├── .github/workflows/ci.yml       · Runs the test suite on every push
+├── MODEL_CARD.md                  · Intended use, data, performance, weak slices, limitations
 └── requirements.txt               · Pinned versions
 ```
 
@@ -163,12 +174,12 @@ Dataset: [Predicting F1 Pit Stops](https://kaggle.com/competitions/playground-se
 The champion is committed at [`models/champion/`](models/champion/) (5.4 MB, XGBoost via FLAML). A clean clone is enough to serve predictions.
 
 ```bash
-git clone https://github.com/EdwardHuang777/F1-Pit-Stop-Prediction.git
+git clone https://github.com/Leo37257/F1-Pit-Stop-Prediction.git
 cd F1-Pit-Stop-Prediction
 
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-pytest tests/                                            # 2/2 smoke tests
+pytest tests/                                            # 36 tests
 python -m src.inference --input data/train.csv --year 2025   # batch predict on 2025 holdout
 ```
 
@@ -211,13 +222,16 @@ targets `<your HF user>/f1-pit-predictor`, or pass `--space owner/name`).
 
 ```python
 import mlflow.sklearn
+from src.inference import decision_threshold
+
 model = mlflow.sklearn.load_model("models/champion")
 probs = model.predict_proba(features_df)[:, 1]
+pit_next_lap = probs >= decision_threshold()      # 0.36, stored in CHAMPION.json; not 0.5
 ```
 
 **Input shape.** A DataFrame with the 15 raw columns from [`src/config.py:RAW_COLUMNS`](src/config.py) excluding `PitNextLap`. Feature engineering (lags, rolling means, tyre-life buckets, race-phase flags) is applied inside `prepare_features()`. Send a full driver-stint history per request so lag/rolling features populate correctly.
 
-**Refresh cadence.** When the training pipeline retrains, `models/champion/` is updated in-place. Render redeploys on every push to `main` (`autoDeploy`), so the new champion and its threshold go live without client changes.
+**Refresh cadence.** When the training pipeline retrains, `src.register` replaces `models/champion/` only if the new model beats the current champion on the test season, and `tune_threshold` then picks its cut-off. Render redeploys on every push to `main` (`autoDeploy`), so a new champion and its threshold go live without client changes.
 
 ---
 
@@ -261,7 +275,7 @@ kept. Details and the remaining weak slices are in the [model card](MODEL_CARD.m
 
 ## 📊 Model Monitoring
 
-Drift monitoring is implemented in [`monitoring/model_monitoring.py`](monitoring/model_monitoring.py) using **Evidently AI**. The script runs four scenarios against the champion model, using 2022–2024 processed data as reference and 2025 as current:
+Drift monitoring is implemented in [`monitoring/model_monitoring.py`](monitoring/model_monitoring.py) using **Evidently AI**. The script runs four scenarios against the champion model, using the 2022–2024 processed data pooled as reference and 2025 as current (the natural-drift check below uses 2024 alone, for the reason given there):
 
 | Scenario | Change | macro-F1 | ROC-AUC | Pit% predicted |
 |---|---|---:|---:|---:|
@@ -279,9 +293,17 @@ python monitoring/model_monitoring.py --fail-on alert  # exit 1 on an alert, for
 python monitoring/natural_drift.py                     # real 2025 drift vs 2024 + slice performance (no injected change)
 ```
 
-**In Airflow** the training DAG now ends with two monitoring tasks on the new champion: `monitor_drift` runs the
-natural-drift check and **fails the run if macro-F1 drops past the alert line** (feature drift alone only warns, since
-features drift every season and the model has held up), and `stress_test` runs the four scenarios for reference.
+**In Airflow** a retrained model is checked before it is served:
+
+| Task | What it does |
+|---|---|
+| `register` | Champion/challenger gate: the new best run replaces the champion only if its macro-F1 on 2025 is higher (both at 0.5). Otherwise it exits 99, Airflow marks it skipped, and the rest of the run is skipped, so the served model and threshold stay as they are. |
+| `tune_threshold` | Picks the new champion's decision threshold out-of-fold and writes it to `CHAMPION.json`. |
+| `monitor_drift` | Natural drift and slices; **fails the run if macro-F1 drops past the alert line** against the macro-F1 recorded for the champion. Feature drift alone only warns, since features drift every season and the model has held up. |
+| `stress_test` | The four injected scenarios, for reference; never fails. |
+
+On this fixed Kaggle dataset the "current" season is the test season, so `monitor_drift` catches a broken export or
+threshold rather than real decay. It becomes a decay check once a new labelled season is scored against the champion.
 
 **Each scenario now gets two verdicts** (`metrics_summary.json` → `alerts`), because they disagree:
 
@@ -311,19 +333,20 @@ Thresholds live in [`monitoring/drift_checks.py`](monitoring/drift_checks.py): P
 
 ### Note on the 2023 anomaly
 
-Year 2023 has ~0.96% pit-next-lap rate vs ~28% in other years — a **Kaggle Playground synthetic artifact**, not actual drift (documented in [`notebooks/EDA.ipynb`](notebooks/EDA.ipynb) §7). Label it as `data-source artifact` in any year-sliced dashboard to avoid false alerts.
+Year 2023 has a 1.0% pit-next-lap rate vs ~28% in other years — a **Kaggle Playground synthetic artifact**, not actual drift (documented in [`notebooks/EDA.ipynb`](notebooks/EDA.ipynb) §7). Label it as `data-source artifact` in any year-sliced dashboard to avoid false alerts.
 
 ---
 
 ## 🛠 Pipeline Reference
 
-### A) Standalone Python (~12 min)
+### A) Standalone Python (~15 min)
 
 ```bash
 python -m src.ingest        # ~2s
 python -m src.preprocess    # ~30s
 python -m src.train         # ~12 min (4 × FLAML @ 150s/algo)
-python -m src.register      # ~5s
+python -m src.register      # ~10s; exits 99 and keeps the champion if the new model does not beat it (--force overrides)
+python evaluation/threshold_tuning.py --write-champion   # ~2 min; only after register promoted a new champion
 ```
 
 Override budget: `TIME_BUDGET=80 python -m src.train` (~2 min smoke run).
@@ -373,19 +396,20 @@ dvc repro   # replays ingest + preprocess; does not run train/register
 - **CatBoost is slow inside arm64 Docker.** A 600s-budget DAG run can take 20–25 min; host venv is ~2× faster.
 - **Don't `rm -rf mlflow/` while Docker is up.** Run `docker compose down` first.
 - **Switching host ↔ Docker:** wipe `mlflow/` and `mlruns/` between environments. `models/champion/` survives.
-- **`data/train.csv` is >50 MB.** GitHub warns but does not block — committed for grader convenience.
-- **HF Space requires `flaml` and `lightgbm`** even though the champion is XGBoost — the FLAML wrapper leaves references in the pickle. See [`deploy/hf/requirements.txt`](deploy/hf/requirements.txt).
+- **`data/train.csv` is >50 MB.** GitHub warns but does not block — committed so a clean clone runs end to end.
+- **The serving image needs `flaml` and `lightgbm`** even though the champion is XGBoost — the FLAML wrapper leaves references in the pickle. See [`deploy/hf/requirements.txt`](deploy/hf/requirements.txt).
+- **SQLAlchemy must stay below 2.1.** MLflow 2.17's sqlite tracking store imports a pool class that SQLAlchemy 2.1 removed; `requirements.txt` pins the range.
 
 ---
 
 ## 🤝 Retrain Workflow
 
-1. Pull latest data if changed.
-2. `python -m src.train` (host) or trigger the Airflow DAG (Docker).
-3. `python -m src.register` runs as the final DAG task; run manually otherwise.
-4. Verify `models/champion/CHAMPION.json` — confirm `test_macro_f1` beats the prior champion.
-5. `git add models/champion/ && git commit -m "Champion v{N}: {algo}, F1={X}"`.
-6. `git push` — re-run `python deploy/hf/push_space.py` to ship to the live Space; update the drift monitoring baseline.
+1. Pull latest data if changed; `dvc repro` rebuilds the ingest and preprocess outputs.
+2. Trigger the Airflow DAG (Docker), or run the standalone commands above on the host.
+3. `register` keeps the current champion unless the new model beats it; the DAG then skips the remaining tasks.
+4. If a new champion was promoted, `tune_threshold` writes its threshold and the monitoring tasks run on it.
+5. Check `models/champion/CHAMPION.json` (`decision_threshold`, `test_macro_f1_at_decision_threshold`) and `monitoring_reports/natural_drift.json`.
+6. `git add models/champion/ && git commit -m "Champion v{N}: {algo}, F1={X}"` and push to `main`; Render redeploys automatically.
 
 ---
 

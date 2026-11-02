@@ -24,7 +24,11 @@ has a pit-next-lap rate of 1.0% against 27–30% in the other seasons.
 | Train | 2022–2024 | 346,246 | 26.7% / 1.0% / 29.5% |
 | Test | 2025 | 92,894 | 28.4% |
 
-## Performance (2025, never used for any choice)
+## Performance on 2025 (the test season)
+
+2025 is held out from training, but it is not untouched: the original pipeline picks among the four AutoML algorithms
+by macro-F1 on 2025, and the champion/challenger check in `src/register.py` compares on it too, so the score below is
+slightly optimistic. The decision threshold and the feature experiments were decided on 2022–2024 out-of-fold scores only.
 
 | | Value |
 |---|---:|
@@ -63,12 +67,17 @@ Race identity makes it worse (the model memorises track noise); history features
 
 - Model-free drift checks (PSI, KS) with thresholds: PSI 0.10 warn / 0.25 alert; macro-F1 drop 0.03 warn / 0.07 alert.
 - Natural drift is measured against the 2024 season. Against 2024, 2 of 31 features alert and macro-F1 holds.
-- The Airflow DAG runs `monitor_drift` after each retrain and fails the run only if macro-F1 drops past the alert line.
+- After a retrain the Airflow DAG keeps the current champion unless the new model beats it, re-picks the threshold
+  (`tune_threshold`), then runs `monitor_drift`, which fails the run only if macro-F1 drops past the alert line. On this
+  fixed dataset that check sees the same season the model was scored on, so it guards the export and the threshold,
+  not real decay.
 - Injected stress tests show `TyreLife` is the most sensitive input: +20 laps costs 0.207 macro-F1.
 
 ## Limitations
 
 - Synthetic training data; real-world performance is unknown.
+- No separate validation season: algorithm choice and the champion/challenger check use 2025, so the test score is
+  slightly optimistic. A new labelled season would be the real test.
 - Lag and rolling features need the driver's full stint history in each request; single laps get missing lags.
 - Slightly under-confident on average (mean probability 0.258 vs observed 0.284).
 - The 2023 season is unrepresentative; it is kept in training as the original team pipeline did, but excluded from threshold tuning and from the drift baseline.

@@ -1,10 +1,10 @@
 """Ingest task: read the raw Kaggle CSV, validate schema, write parquet.
 
-Data source: Kaggle Playground Series S5E6 — F1 Pit-Stop Prediction.
+Data source: Kaggle Playground Series S6E5 — Predicting F1 Pit Stops.
 To pull from scratch:
-    kaggle competitions download -c playground-series-s5e6 -p data/ && unzip data/*.zip -d data/
+    kaggle competitions download -c playground-series-s6e5 -p data/ && unzip data/*.zip -d data/
 
-This script assumes the CSV is already at `data/train.csv` (Member A's pull).
+This script assumes the CSV is already at `data/train.csv`.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ def run() -> str:
     if not config.RAW_TRAIN_CSV.exists():
         raise FileNotFoundError(
             f"Raw CSV not found at {config.RAW_TRAIN_CSV}. "
-            "Pull from Kaggle: `kaggle competitions download -c playground-series-s5e6 -p data/` "
+            "Pull from Kaggle: `kaggle competitions download -c playground-series-s6e5 -p data/` "
             "and unzip into data/, or restore via `dvc checkout`."
         )
     logger.info("Reading raw CSV from %s", config.RAW_TRAIN_CSV)

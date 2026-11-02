@@ -4,8 +4,8 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 
-# MLflow local working state (Member B regenerates with `python -m src.train`).
-# Handoff contract for Members C and D lives in models/, which IS committed.
+# MLflow local working state (regenerate with `python -m src.train`).
+# The served champion lives in models/, which IS committed.
 mlflow/
 mlruns/
 
@@ -13,7 +13,7 @@ mlruns/
 data/interim/
 data/processed/
 
-# Large Member A intermediates - we regenerate from data/train.csv.
+# Large EDA intermediates - regenerated from data/train.csv.
 notebooks/EDA_output/data/
 
 .env
