@@ -68,10 +68,11 @@ def prepare_features(raw_df: pd.DataFrame) -> pd.DataFrame:
     return fe[FEATURE_COLUMNS]
 
 
-def predict_dataframe(raw_df: pd.DataFrame, model: Any | None = None) -> list[int]:
+def predict_dataframe(raw_df: pd.DataFrame, model: Any | None = None,
+                      threshold: float | None = None) -> list[int]:
     fitted = model if model is not None else load_sklearn_model()
     features = prepare_features(raw_df)
-    return [int(x) for x in apply_threshold(fitted, features)]
+    return [int(x) for x in apply_threshold(fitted, features, threshold)]
 
 
 def predict_records(records: list[dict[str, Any]], model: Any | None = None) -> list[int]:
@@ -84,6 +85,7 @@ def score_raw_dataframe(
     raw_df: pd.DataFrame,
     model: Any | None = None,
     year: int | None = None,
+    threshold: float | None = None,
 ) -> InferenceMetrics:
     if config.TARGET_COL not in raw_df.columns:
         raise ValueError(f"Raw input must include {config.TARGET_COL} to calculate F1/AUC")
@@ -97,7 +99,7 @@ def score_raw_dataframe(
     fitted = model if model is not None else load_sklearn_model()
     features = prepare_features(scored)
     y_true = scored[config.TARGET_COL].astype(int)
-    y_pred = apply_threshold(fitted, features)
+    y_pred = apply_threshold(fitted, features, threshold)
     if not hasattr(fitted, "predict_proba"):
         raise ValueError("Model must expose predict_proba to calculate ROC-AUC")
     y_score = fitted.predict_proba(features)[:, 1]
@@ -121,17 +123,18 @@ def _run_cli() -> None:
     if args.year is not None and "Year" in raw.columns:
         raw = raw[raw["Year"] == args.year].reset_index(drop=True)
 
-    pyfunc_model = load_pyfunc_model(args.model_uri)
-    predictions = predict_dataframe(raw, model=pyfunc_model)
+    # the sklearn flavour exposes predict_proba, so the stored threshold applies (the pyfunc wrapper only predicts at 0.5)
+    model = load_sklearn_model(args.model_uri)
+    threshold = decision_threshold(args.model_uri)
+    predictions = predict_dataframe(raw, model=model, threshold=threshold)
 
     output = raw.copy()
     output["prediction"] = predictions
     output.to_csv(args.output, index=False)
-    print(f"Wrote {len(output):,} predictions -> {args.output}")
+    print(f"Wrote {len(output):,} predictions at threshold {threshold} -> {args.output}")
 
     if config.TARGET_COL in raw.columns:
-        sklearn_model = load_sklearn_model(args.model_uri)
-        metrics = score_raw_dataframe(raw, model=sklearn_model)
+        metrics = score_raw_dataframe(raw, model=model, threshold=threshold)
         print(json.dumps(asdict(metrics), indent=2))
     else:
         print(f"Metrics skipped: {args.input} has no {config.TARGET_COL} column")

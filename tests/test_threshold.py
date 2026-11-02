@@ -57,3 +57,22 @@ def test_reliability_bins_cover_all_rows():
     y = (rng.uniform(0, 1, 1000) < p).astype(int)
     table = reliability(y, p)
     assert table["rows"].sum() == 1000 and len(table) == 10
+
+
+def test_cli_writes_predictions_at_the_stored_threshold(tmp_path, monkeypatch):
+    """The batch CLI must label rows with the served cut-off, not the 0.5 of the pyfunc wrapper."""
+    import sys
+
+    from src.inference import _run_cli, load_sklearn_model, prepare_features
+
+    raw = pd.read_csv(config.DATA_DIR / "train.csv")
+    raw = raw[(raw.Year == 2025) & (raw.Race == raw[raw.Year == 2025].Race.iloc[0])].reset_index(drop=True)
+    src, out = tmp_path / "in.csv", tmp_path / "out.csv"
+    raw.to_csv(src, index=False)
+
+    monkeypatch.setattr(sys, "argv", ["inference", "--input", str(src), "--output", str(out)])
+    _run_cli()
+
+    p = load_sklearn_model().predict_proba(prepare_features(raw))[:, 1]
+    assert ((p >= 0.36) & (p < 0.5)).any()                        # rows where the two cut-offs disagree
+    assert pd.read_csv(out)["prediction"].tolist() == (p >= decision_threshold()).astype(int).tolist()
