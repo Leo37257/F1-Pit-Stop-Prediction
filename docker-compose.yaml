@@ -13,6 +13,7 @@ x-airflow-common: &airflow-common
     - ./data:/opt/airflow/data
     - ./mlflow:/opt/airflow/mlflow
     - ./models:/opt/airflow/models
+    - ./evaluation:/opt/airflow/evaluation
     - ./monitoring:/opt/airflow/monitoring
     - ./monitoring_reports:/opt/airflow/monitoring_reports
     - ./logs:/opt/airflow/logs

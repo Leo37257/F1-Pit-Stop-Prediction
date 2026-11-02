@@ -6,7 +6,8 @@ gives out-of-fold probabilities for every training lap. The threshold that maxim
 using 2022 and 2024 only: 2023 is a synthetic season with a 1% pit rate and would drag the threshold toward a
 regime the test season does not have. The chosen threshold is then applied once to the champion on 2025.
 
-    python evaluation/threshold_tuning.py
+    python evaluation/threshold_tuning.py                    # report only
+    python evaluation/threshold_tuning.py --write-champion   # also store the threshold in CHAMPION.json (after a retrain)
 Outputs (evaluation/): threshold_tuning.json, reliability_2025.csv
 """
 from __future__ import annotations
@@ -47,7 +48,19 @@ def reliability(y, p, bins=10) -> pd.DataFrame:
     return g.reset_index(drop=True)[["low", "high", "rows", "mean_predicted", "observed_rate"]]
 
 
-def main() -> None:
+def write_champion_threshold(card_path: Path, summary: dict) -> dict:
+    """Store the chosen threshold and the test macro-F1 it gives next to the model, where the API and monitoring read it."""
+    card = json.loads(card_path.read_text())
+    card["decision_threshold"] = summary["chosen_threshold"]
+    card["decision_threshold_source"] = ("evaluation/threshold_tuning.py: chosen on out-of-fold predictions "
+                                         "(5-fold GroupKFold by Year and Race, seasons 2022 and 2024), "
+                                         "not on the 2025 test season")
+    card["metrics"]["test_macro_f1_at_decision_threshold"] = summary["test_2025"]["tuned"]["macro_f1"]
+    card_path.write_text(json.dumps(card, indent=2) + "\n")
+    return card
+
+
+def main(write_champion: bool = False) -> None:
     import mlflow.sklearn
 
     champion = mlflow.sklearn.load_model(str(config.CHAMPION_EXPORT_DIR))
@@ -97,7 +110,15 @@ def main() -> None:
     (OUT / "threshold_tuning.json").write_text(json.dumps(summary, indent=2))
     reliability(yt, pt).round(4).to_csv(OUT / "reliability_2025.csv", index=False)
     print(json.dumps(summary, indent=2))
+    if write_champion:
+        write_champion_threshold(config.CHAMPION_EXPORT_DIR / "CHAMPION.json", summary)
+        print(f"decision threshold {thr} written to {config.CHAMPION_EXPORT_DIR / 'CHAMPION.json'}")
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Choose the champion's decision threshold out-of-fold")
+    parser.add_argument("--write-champion", action="store_true",
+                        help="store the threshold and its test macro-F1 in models/champion/CHAMPION.json")
+    main(parser.parse_args().write_champion)

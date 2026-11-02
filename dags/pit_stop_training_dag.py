@@ -1,6 +1,8 @@
 """F1 pit-stop training pipeline.
 
-Four sequential BashOperators that invoke `python -m src.<task>` inside the
+ingest -> preprocess -> train -> register -> tune_threshold -> [monitor_drift, stress_test]
+
+Every task is a BashOperator that runs a fresh `python` process inside the
 Airflow container. We use Bash rather than PythonOperator because the train
 task pulls in catboost/xgboost/lightgbm + MLflow, and Airflow's standard
 task runner forks the task from a multi-threaded parent process which
@@ -11,10 +13,17 @@ commands used during development.
 Schedule is None (manual trigger). DVC versioning and git tagging happen
 outside the DAG.
 
-After register, two monitoring tasks run in parallel on the new champion:
-  monitor_drift  natural drift + slice performance on the test season; FAILS the run if macro-F1 drops
-                 past the alert line versus the champion (feature drift alone only warns)
-  stress_test    the four injected-drift scenarios with Evidently reports; informational, never fails
+register is a champion/challenger gate: the new best run replaces the champion only if it scores
+higher on the test season. Otherwise register exits 99, Airflow marks it skipped, and every task after
+it is skipped too, so the served model and its threshold are left alone.
+
+When the challenger wins:
+  tune_threshold  picks the decision threshold out-of-fold and writes it to CHAMPION.json
+  monitor_drift   natural drift + slice performance; fails the run if macro-F1 on the current data drops past
+                  the alert line versus the macro-F1 recorded for the champion (feature drift alone only warns).
+                  On this static dataset that is the same season, so it guards against a broken export or
+                  threshold rather than real decay; it becomes a decay check once a new labelled season is scored.
+  stress_test     the four injected-drift scenarios with Evidently reports; informational, never fails
 
 Triggering with `{"time_budget": 80}` in the run config gives a ~2 min smoke
 run; the default 600s gives the production training (~10 min).
@@ -31,11 +40,11 @@ from airflow.operators.bash import BashOperator
 
 with DAG(
     dag_id="pit_stop_training",
-    description="F1 pit-stop binary classifier: ingest -> preprocess -> train -> register",
+    description="F1 pit-stop classifier: ingest -> preprocess -> train -> register (gate) -> tune_threshold -> monitoring",
     schedule=None,
     start_date=datetime(2026, 5, 1),
     catchup=False,
-    default_args={"owner": "member-b", "retries": 0},
+    default_args={"owner": "f1-pit-stop", "retries": 0},
     params={
         "time_budget": Param(
             600,
@@ -46,7 +55,7 @@ with DAG(
             description="Total time across all 4 algorithms. 80 = smoke run (~2min), 600 = production (~10min).",
         ),
     },
-    tags=["mlops", "f1", "member-b"],
+    tags=["mlops", "f1"],
 ) as dag:
 
     ingest = BashOperator(
@@ -70,6 +79,12 @@ with DAG(
     register = BashOperator(
         task_id="register",
         bash_command="cd /opt/airflow && python -m src.register",
+        skip_on_exit_code=99,      # challenger lost: skip the rest, keep the champion
+    )
+
+    tune_threshold = BashOperator(
+        task_id="tune_threshold",
+        bash_command="cd /opt/airflow && python evaluation/threshold_tuning.py --write-champion",
     )
 
     monitor_drift = BashOperator(
@@ -82,4 +97,4 @@ with DAG(
         bash_command="cd /opt/airflow && python monitoring/model_monitoring.py",
     )
 
-    ingest >> preprocess >> train >> register >> [monitor_drift, stress_test]
+    ingest >> preprocess >> train >> register >> tune_threshold >> [monitor_drift, stress_test]
