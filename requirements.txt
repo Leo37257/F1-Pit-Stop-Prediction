@@ -3,6 +3,8 @@ pyarrow==17.0.0
 numpy==1.26.4
 scikit-learn==1.5.2
 mlflow==2.17.2
+# MLflow 2.17's sqlite tracking store needs SQLAlchemy < 2.1; the Airflow 2.9 image keeps its own 1.4.x
+SQLAlchemy>=1.4,<2.1
 flaml[automl]==2.3.2
 lightgbm==4.5.0
 xgboost==2.1.2
