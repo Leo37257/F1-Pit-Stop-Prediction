@@ -9,7 +9,7 @@ Directly reuses the team's existing pipeline:
 The champion model is an sklearn Pipeline (preprocessor + XGBoost),
 so model.predict(X) handles all preprocessing internally.
 
-Four monitoring scenarios
+Four monitoring scenarios (reference: the 2022-2024 training seasons pooled; natural_drift.py uses 2024 alone)
 ─────────────────────────
   S1  Step 7  : test data, no changes              → baseline
   S2  Step 9a : TyreLife += 20                     → tyre-life drift
@@ -66,8 +66,10 @@ from src.inference import apply_threshold, decision_threshold
 
 OUT_DIR = ROOT / "monitoring_reports"
 OUT_DIR.mkdir(exist_ok=True)
-_META = json.loads((config.CHAMPION_EXPORT_DIR / "CHAMPION.json").read_text())["metrics"]
+_CARD = json.loads((config.CHAMPION_EXPORT_DIR / "CHAMPION.json").read_text())
+_META = _CARD["metrics"]
 CHAMPION_F1 = round(_META.get("test_macro_f1_at_decision_threshold", _META["test_macro_f1"]), 4)
+CHAMPION_AUC = round(_META["test_roc_auc"], 4)
 
 # feature change parameters
 TYRELIFE_DELTA     = 20      # change A
@@ -304,10 +306,10 @@ def main(fail_on: str = "never") -> int:
             "S4": f"Cumulative_Degradation x {DEGRADATION_FACTOR}",
         },
         "champion_baseline": {
-            "algorithm":          "xgboost",
+            "algorithm":          _CARD.get("algorithm"),
             "decision_threshold": decision_threshold(),
             "test_macro_f1":      CHAMPION_F1,
-            "test_roc_auc":       0.8945,
+            "test_roc_auc":       CHAMPION_AUC,
         },
         **results,
         "thresholds": {"psi_warn": dc.PSI_WARN, "psi_alert": dc.PSI_ALERT,
@@ -322,7 +324,7 @@ def main(fail_on: str = "never") -> int:
     # console table
     s1m = results["S1_original"]
     rows = [
-        ("Champion (train eval)",    CHAMPION_F1, 0.8945, "—"),
+        ("Champion (as registered)", CHAMPION_F1, CHAMPION_AUC, "—"),
         ("S1  original test",        s1m["f1_macro"],                          s1m["roc_auc"],                          f"{s1m['pit_rate_predicted']:.1%}"),
         ("S2  TyreLife +20",         results["S2_tyrelife_plus20"]["f1_macro"], results["S2_tyrelife_plus20"]["roc_auc"], f"{results['S2_tyrelife_plus20']['pit_rate_predicted']:.1%}"),
         ("S3  Compound->SOFT",       results["S3_compound"]["f1_macro"],        results["S3_compound"]["roc_auc"],        f"{results['S3_compound']['pit_rate_predicted']:.1%}"),
