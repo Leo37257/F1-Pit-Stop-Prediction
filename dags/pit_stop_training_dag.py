@@ -25,8 +25,8 @@ When the challenger wins:
                   threshold rather than real decay; it becomes a decay check once a new labelled season is scored.
   stress_test     the four injected-drift scenarios with Evidently reports; informational, never fails
 
-Triggering with `{"time_budget": 80}` in the run config gives a ~2 min smoke
-run; the default 600s gives the production training (~10 min).
+Triggering with `{"time_budget": 80}` in the run config gives a smoke run (all six
+tasks in about 4 min in Docker); the default 600s gives the production training.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ with DAG(
             minimum=60,
             maximum=3600,
             title="FLAML AutoML total budget (seconds)",
-            description="Total time across all 4 algorithms. 80 = smoke run (~2min), 600 = production (~10min).",
+            description="Total time across all 4 algorithms. 80 = smoke run (~4 min for the whole DAG), 600 = production.",
         ),
     },
     tags=["mlops", "f1"],

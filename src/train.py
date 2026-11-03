@@ -4,13 +4,22 @@ We run one FLAML AutoML invocation per algorithm so each produces a clean MLflow
 run with that algorithm's best hyperparameters, test metrics, and a saved
 sklearn Pipeline (preprocessor + estimator). Champion selection happens in
 src.register based on test_macro_f1.
+
+Each algorithm trains in its own freshly spawned process. In a single process,
+CatBoost hung in the Airflow image (Linux arm64) once LightGBM and XGBoost had
+run: its worker threads spun at 100% for hours on a FLAML trial that takes 14 s
+when CatBoost runs alone. By then the process holds three OpenMP runtimes
+(system, scikit-learn and XGBoost copies of libgomp) next to CatBoost's own
+thread pool. A fresh process per algorithm keeps the native libraries apart.
 """
 
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import os
 import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +63,7 @@ def _ensure_experiment(name: str, expected_artifact_root: str) -> None:
 
 
 def run(time_budget_total: int | None = None) -> dict[str, Any]:
-    """Train one FLAML AutoML per algorithm, log each to MLflow.
+    """Train one FLAML AutoML per algorithm, each in a fresh process, log each to MLflow.
 
     Returns a dict keyed by algorithm with test metrics for quick inspection.
     """
@@ -66,75 +75,83 @@ def run(time_budget_total: int | None = None) -> dict[str, Any]:
     per_algo = max(15, total // len(config.AUTOML_ESTIMATORS))
     logger.info("Total budget=%ds, per-algorithm budget=%ds", total, per_algo)
 
+    results: dict[str, dict[str, float]] = {}
+    spawn = multiprocessing.get_context("spawn")
+    for algo in config.AUTOML_ESTIMATORS:
+        # a new pool per algorithm: the worker process exits before the next algorithm starts
+        with ProcessPoolExecutor(max_workers=1, mp_context=spawn) as pool:
+            results[algo] = r = pool.submit(train_one, algo, per_algo).result()
+        logger.info(
+            "[%s] test_macro_f1=%.4f test_roc_auc=%.4f fit=%.1fs run_id=%s",
+            algo, r["test_macro_f1"], r["test_roc_auc"], r["fit_seconds"], r["run_id"],
+        )
+    return results
+
+
+def train_one(algo: str, per_algo: int) -> dict[str, Any]:
+    """Fit FLAML AutoML restricted to one algorithm and log it as an MLflow run."""
+    mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)
+    mlflow.set_experiment(config.EXPERIMENT_NAME)
+
     train_df = pd.read_parquet(config.PROCESSED_TRAIN)
     test_df = pd.read_parquet(config.PROCESSED_TEST)
     X_train = train_df.drop(columns=[config.TARGET_COL])
     y_train = train_df[config.TARGET_COL].astype(int)
     X_test = test_df.drop(columns=[config.TARGET_COL])
     y_test = test_df[config.TARGET_COL].astype(int)
-    logger.info("Train shape %s, Test shape %s", X_train.shape, X_test.shape)
 
-    results: dict[str, dict[str, float]] = {}
+    with mlflow.start_run(run_name=f"flaml_{algo}") as run:
+        t0 = time.perf_counter()
+        pipe = Pipeline([
+            ("pre", build_preprocessor()),
+            ("clf", AutoML()),
+        ])
+        pipe.fit(
+            X_train, y_train,
+            clf__time_budget=per_algo,
+            clf__metric=config.AUTOML_METRIC,
+            clf__task="classification",
+            clf__seed=config.RANDOM_SEED,
+            clf__estimator_list=[algo],
+            clf__verbose=0,
+            clf__eval_method="holdout",
+        )
+        fit_seconds = time.perf_counter() - t0
 
-    for algo in config.AUTOML_ESTIMATORS:
-        with mlflow.start_run(run_name=f"flaml_{algo}") as run:
-            t0 = time.perf_counter()
-            pipe = Pipeline([
-                ("pre", build_preprocessor()),
-                ("clf", AutoML()),
-            ])
-            pipe.fit(
-                X_train, y_train,
-                clf__time_budget=per_algo,
-                clf__metric=config.AUTOML_METRIC,
-                clf__task="classification",
-                clf__seed=config.RANDOM_SEED,
-                clf__estimator_list=[algo],
-                clf__verbose=0,
-                clf__eval_method="holdout",
-            )
-            fit_seconds = time.perf_counter() - t0
+        y_pred = pipe.predict(X_test)
+        y_proba = pipe.predict_proba(X_test)[:, 1]
+        test_macro_f1 = float(f1_score(y_test, y_pred, average="macro"))
+        test_roc_auc = float(roc_auc_score(y_test, y_proba))
 
-            y_pred = pipe.predict(X_test)
-            y_proba = pipe.predict_proba(X_test)[:, 1]
-            test_macro_f1 = float(f1_score(y_test, y_pred, average="macro"))
-            test_roc_auc = float(roc_auc_score(y_test, y_proba))
+        clf = pipe.named_steps["clf"]
+        mlflow.set_tag("algorithm", algo)
+        mlflow.log_param("algorithm", algo)
+        mlflow.log_param("time_budget_seconds", per_algo)
+        mlflow.log_param("random_seed", config.RANDOM_SEED)
+        for k, v in (clf.best_config or {}).items():
+            mlflow.log_param(f"best_{k}", v)
+        mlflow.log_metrics({
+            "test_macro_f1": test_macro_f1,
+            "test_roc_auc": test_roc_auc,
+            "val_loss": float(clf.best_loss) if clf.best_loss is not None else float("nan"),
+            "fit_seconds": fit_seconds,
+            "flaml_best_iteration": int(clf.best_iteration or 0),
+        })
 
-            clf = pipe.named_steps["clf"]
-            mlflow.set_tag("algorithm", algo)
-            mlflow.log_param("algorithm", algo)
-            mlflow.log_param("time_budget_seconds", per_algo)
-            mlflow.log_param("random_seed", config.RANDOM_SEED)
-            for k, v in (clf.best_config or {}).items():
-                mlflow.log_param(f"best_{k}", v)
-            mlflow.log_metrics({
-                "test_macro_f1": test_macro_f1,
-                "test_roc_auc": test_roc_auc,
-                "val_loss": float(clf.best_loss) if clf.best_loss is not None else float("nan"),
-                "fit_seconds": fit_seconds,
-                "flaml_best_iteration": int(clf.best_iteration or 0),
-            })
+        signature = infer_signature(X_test.head(5), y_pred[:5])
+        mlflow.sklearn.log_model(
+            pipe,
+            artifact_path="model",
+            signature=signature,
+            input_example=X_test.head(5),
+        )
 
-            signature = infer_signature(X_test.head(5), y_pred[:5])
-            mlflow.sklearn.log_model(
-                pipe,
-                artifact_path="model",
-                signature=signature,
-                input_example=X_test.head(5),
-            )
-
-            results[algo] = {
-                "run_id": run.info.run_id,
-                "test_macro_f1": test_macro_f1,
-                "test_roc_auc": test_roc_auc,
-                "fit_seconds": fit_seconds,
-            }
-            logger.info(
-                "[%s] test_macro_f1=%.4f test_roc_auc=%.4f fit=%.1fs run_id=%s",
-                algo, test_macro_f1, test_roc_auc, fit_seconds, run.info.run_id,
-            )
-
-    return results
+    return {
+        "run_id": run.info.run_id,
+        "test_macro_f1": test_macro_f1,
+        "test_roc_auc": test_roc_auc,
+        "fit_seconds": fit_seconds,
+    }
 
 
 if __name__ == "__main__":

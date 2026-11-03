@@ -349,16 +349,16 @@ python -m src.register      # ~10s; exits 99 and keeps the champion if the new m
 python evaluation/threshold_tuning.py --write-champion   # ~2 min; only after register promoted a new champion
 ```
 
-Override budget: `TIME_BUDGET=80 python -m src.train` (~2 min smoke run).
+Override budget: `TIME_BUDGET=80 python -m src.train` (~3 min smoke run). Each algorithm trains in its own process (see Gotchas).
 
-### B) Airflow DAG via Docker (~20–25 min)
+### B) Airflow DAG via Docker
 
 ```bash
 mkdir -p mlflow              # one-time after fresh clone
 docker compose build         # ~10 min first time; cached after
 docker compose up -d
 # http://localhost:8080  →  admin / admin  →  trigger pit_stop_training
-# Default budget {"time_budget": 600}.  Use {"time_budget": 80} for smoke.
+# Default budget {"time_budget": 600}.  {"time_budget": 80} is a smoke run: all six tasks in ~4 min.
 docker compose down
 ```
 
@@ -393,7 +393,9 @@ dvc repro   # replays ingest + preprocess; does not run train/register
 ## ⚠️ Gotchas
 
 - **First Docker build is ~10 min** (catboost + xgboost + lightgbm + arm64 wheels). Cached afterward.
-- **CatBoost is slow inside arm64 Docker.** A 600s-budget DAG run can take 20–25 min; host venv is ~2× faster.
+- **Each algorithm trains in its own process.** In one process, CatBoost hung in the arm64 Airflow image after LightGBM and
+  XGBoost had run (worker threads at 100% for hours on a trial that takes 14 s alone; three OpenMP runtimes were loaded).
+  `src.train` now spawns a fresh process per algorithm; CatBoost then takes ~40 s in Docker and on the host with a smoke budget.
 - **Don't `rm -rf mlflow/` while Docker is up.** Run `docker compose down` first.
 - **Switching host ↔ Docker:** wipe `mlflow/` and `mlruns/` between environments. `models/champion/` survives.
 - **`data/train.csv` is >50 MB.** GitHub warns but does not block — committed so a clean clone runs end to end.

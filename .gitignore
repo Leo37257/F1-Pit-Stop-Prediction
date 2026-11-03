@@ -24,3 +24,6 @@ logs/
 
 # monitoring reports (HTML too large, keep JSON only)
 monitoring_reports/*.html
+
+# CatBoost training logs written to the working directory
+catboost_info/
